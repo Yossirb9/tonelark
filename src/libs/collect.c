@@ -427,7 +427,7 @@ int set_params(dt_lib_module_t *self,
 
 dt_view_type_flags_t views(dt_lib_module_t *self)
 {
-  return DT_VIEW_LIGHTTABLE | DT_VIEW_MAP | DT_VIEW_PRINT;
+  return DT_VIEW_LIGHTTABLE | DT_VIEW_DARKROOM | DT_VIEW_MAP | DT_VIEW_PRINT;
 }
 
 uint32_t container(dt_lib_module_t *self)
@@ -3059,7 +3059,9 @@ static void entry_changed(GtkEntry *entry,
 
 int position(const dt_lib_module_t *self)
 {
-  return 400;
+  // Lightroom: collections come after snapshots and history in develop,
+  // at the top of the library left panel
+  return dt_view_get_current() == DT_VIEW_DARKROOM ? 890 : 1010;
 }
 
 static gboolean entry_focus_in_callback(GtkWidget *w,

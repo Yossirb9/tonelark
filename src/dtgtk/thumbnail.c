@@ -20,6 +20,7 @@
 #include "common/extra_optimizations.h"
 
 #include "dtgtk/thumbnail.h"
+#include "common/tags.h"
 
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
@@ -297,6 +298,11 @@ static void _image_get_infos(dt_thumbnail_t *thumb)
 
   // altered
   thumb->is_altered = dt_image_altered(thumb->imgid);
+
+  // Lightroom pick flag
+  static guint pick_tag = 0;
+  if(!pick_tag) dt_tag_exists("darktable|pick", &pick_tag);
+  thumb->is_picked = pick_tag && dt_is_tag_attached(pick_tag, thumb->imgid);
 
   // grouping
   DT_DEBUG_SQLITE3_CLEAR_BINDINGS(darktable.view_manager->statements.get_grouped);
@@ -975,6 +981,7 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
   _set_flag(thumb->w_main, GTK_STATE_FLAG_SELECTED, thumb->selected);
 
   gtk_widget_set_visible(thumb->w_altered, thumb->is_altered);
+  gtk_widget_set_visible(thumb->w_pick, thumb->is_picked);
   _thumb_update_tags_tooltip(thumb);
   gtk_widget_set_visible(thumb->w_tags, thumb->has_tags);
 }
@@ -996,6 +1003,7 @@ static gboolean _thumbs_hide_overlays(gpointer user_data)
   gtk_widget_hide(thumb->w_color);
   gtk_widget_hide(thumb->w_local_copy);
   gtk_widget_hide(thumb->w_altered);
+  gtk_widget_hide(thumb->w_pick);
   gtk_widget_hide(thumb->w_tags);
   gtk_widget_hide(thumb->w_group);
   gtk_widget_hide(thumb->w_audio);
@@ -1673,6 +1681,15 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb,
                      G_CALLBACK(_event_btn_enter_leave), thumb);
     gtk_overlay_add_overlay(GTK_OVERLAY(overlays_parent), thumb->w_altered);
 
+    // the Lightroom pick flag
+    thumb->w_pick = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_pick_flag, 0, NULL);
+    gtk_widget_set_name(thumb->w_pick, "thumb-pick");
+    gtk_widget_set_tooltip_text(thumb->w_pick, _("picked (P), unflag with U"));
+    gtk_widget_set_valign(thumb->w_pick, GTK_ALIGN_START);
+    gtk_widget_set_halign(thumb->w_pick, GTK_ALIGN_START);
+    gtk_widget_set_no_show_all(thumb->w_pick, TRUE);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlays_parent), thumb->w_pick);
+
     // the tags icon
     thumb->w_tags = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_tags, 0, NULL);
     gtk_widget_set_name(thumb->w_tags, "thumb-tags");
@@ -1949,6 +1966,12 @@ static void _thumb_resize_overlays(dt_thumbnail_t *thumb)
     gtk_widget_set_halign(thumb->w_altered, GTK_ALIGN_END);
     gtk_widget_set_margin_top(thumb->w_altered, thumb->img_margin->top);
     gtk_widget_set_margin_end(thumb->w_altered, thumb->img_margin->right);
+
+    // the pick flag, top left like Lightroom
+    gtk_widget_set_size_request(thumb->w_pick, 2.0 * r1, 2.0 * r1);
+    // below the file extension, on the corner of the image
+    gtk_widget_set_margin_top(thumb->w_pick, thumb->img_margin->top + 2.4 * r1);
+    gtk_widget_set_margin_start(thumb->w_pick, thumb->img_margin->left);
 
     // the tags icon
     gtk_widget_set_size_request(thumb->w_tags, 2.0 * r1, 2.0 * r1);

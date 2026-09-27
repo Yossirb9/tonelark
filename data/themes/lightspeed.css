@@ -214,7 +214,7 @@ box *,
 
 #basicpanel
 {
-  padding: 0.2em 0.1em 0.5em 0.1em;
+  padding: 0.3em 0.9em 0.6em 0.9em;
 }
 
 #basicpanel-section
@@ -281,4 +281,60 @@ tooltip label,
 #range-current label
 {
   color: @tooltip_fg_color;
+}
+
+/* ------------------------------------ Lightroom panel bottom buttons */
+
+#panel-buttons
+{
+  background-color: @ls_window;
+  padding: 0.35em 0.2em;
+}
+
+#panel-buttons button
+{
+  background-color: @ls_button;
+  border: 1px solid #6a6a6a;
+  border-radius: 2px;
+  color: #e0e0e0;
+  padding: 0.25em 0.5em;
+  margin: 0 0.25em;
+}
+
+#panel-buttons button:hover
+{
+  background-color: #6e6e6e;
+}
+
+/* "Auto" in the basic panel: a plain text button */
+#basicpanel #basicpanel-auto
+{
+  background-color: transparent;
+  border: none;
+  color: #d8d8d8;
+  padding: 0 0.4em;
+}
+
+#basicpanel #basicpanel-auto:hover
+{
+  color: #ffffff;
+}
+
+#basicpanel-picker
+{
+  margin-right: 0.3em;
+}
+
+/* breathing room between the controls and the panel edges */
+.dt_plugin_ui_main
+{
+  padding: 0.3em 0.9em 0.5em 0.9em;
+}
+
+/* Lightroom pick flag on thumbnails */
+#thumb-pick,
+#thumb-main:hover #thumb-pick
+{
+  color: #f4f4f4;
+  background-color: transparent;
 }

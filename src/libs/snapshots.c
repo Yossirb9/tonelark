@@ -72,8 +72,13 @@ typedef struct dt_lib_snapshots_t
   /* current active snapshots */
   uint32_t num_snapshots;
 
-  /* snapshots */
-  dt_lib_snapshot_t snapshot[MAX_SNAPSHOT];
+  /* snapshots, the extra last one is the hidden Lightroom-style "before" */
+  dt_lib_snapshot_t snapshot[MAX_SNAPSHOT + 1];
+
+  /* state saved while before/after is shown */
+  int before_prev_selected;
+  gboolean before_prev_vertical, before_prev_inverted, before_prev_sidebyside;
+  double before_prev_x, before_prev_y;
 
   /* change snapshot overlay controls */
   gboolean dragging, vertical, inverted, panning, sidebyside;
@@ -208,6 +213,15 @@ static inline gboolean _get_rotation_area(dt_lib_module_t *self,
   return (abs(x - _rx) < area_size) && (abs(y - _ry) < area_size);
 }
 
+#define BEFORE_INDEX MAX_SNAPSHOT
+
+// Lightroom "before" view: the whole image shows the unedited photo,
+// no split line and the mouse is left to the darkroom
+static inline gboolean _before_only(const dt_lib_snapshots_t *d)
+{
+  return d->selected == BEFORE_INDEX && d->vertical && d->vp_xpointer >= 1.0;
+}
+
 /* expose snapshot over center viewport */
 void gui_post_expose(dt_lib_module_t *self,
                      cairo_t *cri,
@@ -306,6 +320,12 @@ void gui_post_expose(dt_lib_module_t *self,
     }
 
     cairo_restore(cri);
+
+    if(_before_only(d))
+    {
+      d->on_going = FALSE;
+      return;
+    }
 
     // draw the split line using the selected overlay color
     dt_draw_set_color_overlay(cri, TRUE, 0.7);
@@ -420,7 +440,7 @@ int button_pressed(struct dt_lib_module_t *self,
     return 0;
   }
 
-  if(d->selected >= 0 && which != GDK_BUTTON_MIDDLE)
+  if(d->selected >= 0 && which != GDK_BUTTON_MIDDLE && !_before_only(d))
   {
     if(d->on_going) return 1;
 
@@ -485,7 +505,7 @@ int mouse_moved(dt_lib_module_t *self,
   // if panning, do not handle here, let darkroom do the job
   if(d->panning) return 0;
 
-  if(d->selected >= 0)
+  if(d->selected >= 0 && !_before_only(d))
   {
     const double xp = x / d->vp_width;
     const double yp = y / d->vp_height;
@@ -508,6 +528,109 @@ int mouse_moved(dt_lib_module_t *self,
   }
 
   return 0;
+}
+
+// history end of the image as it was after import: the leading history items
+// that are default modules or auto-applied presets
+static int _before_history_end(dt_develop_t *dev)
+{
+  int base = 0, k = 0;
+  for(GList *h = dev->history; h && k < dev->history_end; h = g_list_next(h), k++)
+  {
+    const dt_dev_history_item_t *hist = h->data;
+    const gboolean auto_item =
+      g_str_has_prefix(hist->multi_name, "_builtin_")
+      || (hist->module && (hist->module->default_enabled || hist->module->hide_enable_button));
+    if(!auto_item) break;
+    base = k + 1;
+  }
+  return base;
+}
+
+// leave the before view, back to what was shown before
+static void _before_restore(dt_lib_snapshots_t *d)
+{
+  d->selected = d->before_prev_selected;
+  d->vertical = d->before_prev_vertical;
+  d->inverted = d->before_prev_inverted;
+  d->sidebyside = d->before_prev_sidebyside;
+  d->vp_xpointer = d->before_prev_x;
+  d->vp_ypointer = d->before_prev_y;
+  if(d->selected >= 0) d->snap_requested = TRUE;
+  darktable.lib->proxy.snapshots.enabled = d->selected >= 0;
+  dt_control_queue_redraw_center();
+}
+
+static void _before_after(dt_lib_module_t *self, const gboolean split)
+{
+  dt_lib_snapshots_t *d = self->data;
+  dt_develop_t *dev = darktable.develop;
+
+  if(d->selected == BEFORE_INDEX)
+  {
+    if(split == _before_only(d))
+    {
+      // switch between the full before view and the split, the
+      // rendered before image stays valid
+      d->vertical = TRUE;
+      d->inverted = FALSE;
+      d->vp_xpointer = split ? 0.5 : 1.0;
+      d->vp_ypointer = 0.5;
+      dt_control_log(split ? _("before | after") : _("before"));
+      dt_control_queue_redraw_center();
+      return;
+    }
+    // back to "after"
+    _before_restore(d);
+    dt_control_log(_("after"));
+    return;
+  }
+
+  const dt_imgid_t imgid = dev->image_storage.id;
+  if(!dt_is_valid_imgid(imgid)) return;
+
+  // make sure the snapshot sees the current history
+  dt_dev_write_history(dev);
+
+  dt_lib_snapshot_t *s = &d->snapshot[BEFORE_INDEX];
+  g_free(s->module);
+  g_free(s->label);
+  s->module = s->label = NULL;
+  dt_free_align(s->buf);
+  s->buf = NULL;
+  s->id = SNAPSHOT_ID_OFFSET | BEFORE_INDEX;
+  s->imgid = imgid;
+  s->history_end = _before_history_end(dev);
+  s->ctx = 0;
+  dt_history_snapshot_create(s->imgid, s->id, s->history_end);
+
+  d->before_prev_selected = d->selected;
+  d->before_prev_vertical = d->vertical;
+  d->before_prev_inverted = d->inverted;
+  d->before_prev_sidebyside = d->sidebyside;
+  d->before_prev_x = d->vp_xpointer;
+  d->before_prev_y = d->vp_ypointer;
+
+  d->selected = BEFORE_INDEX;
+  d->vertical = TRUE;
+  d->inverted = FALSE;
+  d->sidebyside = FALSE;
+  d->vp_xpointer = split ? 0.5 : 1.0;
+  d->vp_ypointer = 0.5;
+  d->snap_requested = TRUE;
+  darktable.lib->proxy.snapshots.enabled = TRUE;
+  dt_control_log(split ? _("before | after") : _("before"));
+  dt_control_queue_redraw_center();
+}
+
+static void _before_after_toggle(dt_action_t *action)
+{
+  _before_after(dt_action_lib(action), FALSE);
+}
+
+static void _before_after_split(dt_action_t *action)
+{
+  _before_after(dt_action_lib(action), TRUE);
 }
 
 static void _lib_snapshots_toggle_last(dt_action_t *action)
@@ -730,6 +853,9 @@ static void _signal_image_changed(gpointer instance,
 
   const dt_imgid_t imgid = darktable.develop->image_storage.id;
 
+  // Lightroom leaves the before view when moving to another photo
+  if(d->selected == BEFORE_INDEX) _before_restore(d);
+
   for(uint32_t k = 0; k < MAX_SNAPSHOT; k++)
   {
     dt_lib_snapshot_t *s = &d->snapshot[k];
@@ -876,6 +1002,14 @@ void gui_init(dt_lib_module_t *self)
 
   dt_action_register(DT_ACTION(self), N_("toggle last snapshot"),
                      _lib_snapshots_toggle_last, 0, 0);
+
+  // Lightroom: \ shows the photo before the edits, Y a before / after split
+  d->snapshot[BEFORE_INDEX].id = SNAPSHOT_ID_OFFSET | BEFORE_INDEX;
+  _clear_snapshot_entry(&d->snapshot[BEFORE_INDEX]);
+  dt_action_register(DT_ACTION(self), N_("before after"),
+                     _before_after_toggle, GDK_KEY_backslash, 0);
+  dt_action_register(DT_ACTION(self), N_("before after split"),
+                     _before_after_split, GDK_KEY_y, 0);
 
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, _signal_profile_changed);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _signal_image_changed);

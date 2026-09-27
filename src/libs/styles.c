@@ -50,7 +50,8 @@ typedef struct dt_lib_styles_t
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("styles");
+  // Lightroom calls them presets
+  return _("presets");
 }
 
 const char *description(dt_lib_module_t *self)
@@ -61,7 +62,7 @@ const char *description(dt_lib_module_t *self)
 
 dt_view_type_flags_t views(dt_lib_module_t *self)
 {
-  return DT_VIEW_LIGHTTABLE | DT_VIEW_MULTI;
+  return DT_VIEW_LIGHTTABLE | DT_VIEW_DARKROOM | DT_VIEW_MULTI;
 }
 
 uint32_t container(dt_lib_module_t *self)
@@ -71,7 +72,8 @@ uint32_t container(dt_lib_module_t *self)
 
 int position(const dt_lib_module_t *self)
 {
-  return 599;
+  // Lightroom: presets are the first panel under the navigator in develop
+  return dt_view_get_current() == DT_VIEW_DARKROOM ? 1003 : 599;
 }
 
 typedef enum _styles_columns_t
@@ -959,7 +961,7 @@ void gui_init(dt_lib_module_t *self)
 
   self->widget = dt_gui_vbox
     (d->entry,
-     dt_ui_resize_wrap(GTK_WIDGET(d->tree), 250, "plugins/lighttable/style/windowheight"),
+     dt_ui_resize_wrap(GTK_WIDGET(d->tree), 110, "plugins/lighttable/style/windowheight"),
      d->hide_preview, d->duplicate, d->applymode,
      dt_gui_hbox(d->create_button, d->edit_button, d->delete_button),
      dt_gui_hbox(d->import_button, d->export_button),

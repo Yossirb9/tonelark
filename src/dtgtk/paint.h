@@ -137,6 +137,8 @@ void dtgtk_cairo_paint_star(cairo_t *cr, gint x, gint y, gint w, gint h, gint fl
 void dtgtk_cairo_paint_unratestar(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint an altered icon on thumbs */
 void dtgtk_cairo_paint_altered(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Lightroom-style pick flag */
+void dtgtk_cairo_paint_pick_flag(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint an tags icon on thumbs */
 void dtgtk_cairo_paint_tags(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint an audio icon on thumbs */

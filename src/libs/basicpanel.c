@@ -64,14 +64,14 @@ typedef enum _wb_preset_t
 
 static const struct { const char *name; float temp, tint; } _wb_presets[] =
 {
-  { N_("as shot"),     0.0f,    0.0f },
-  { N_("daylight"),    5500.0f, 10.0f },
-  { N_("cloudy"),      6500.0f, 10.0f },
-  { N_("shade"),       7500.0f, 10.0f },
-  { N_("tungsten"),    2850.0f, 0.0f },
-  { N_("fluorescent"), 3800.0f, 21.0f },
-  { N_("flash"),       5500.0f, 0.0f },
-  { N_("custom"),      0.0f,    0.0f },
+  { N_("As Shot"),     0.0f,    0.0f },
+  { N_("Daylight"),    5500.0f, 10.0f },
+  { N_("Cloudy"),      6500.0f, 10.0f },
+  { N_("Shade"),       7500.0f, 10.0f },
+  { N_("Tungsten"),    2850.0f, 0.0f },
+  { N_("Fluorescent"), 3800.0f, 21.0f },
+  { N_("Flash"),       5500.0f, 0.0f },
+  { N_("Custom"),      0.0f,    0.0f },
 };
 
 const char *name(dt_lib_module_t *self)
@@ -449,12 +449,12 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_name(self->widget, "basicpanel");
 
   // treatment
-  d->color_btn = gtk_toggle_button_new_with_label(_("color"));
-  d->bw_btn = gtk_toggle_button_new_with_label(_("black & white"));
+  d->color_btn = gtk_toggle_button_new_with_label(_("Color"));
+  d->bw_btn = gtk_toggle_button_new_with_label(_("Black & White"));
   gtk_widget_set_tooltip_text(d->bw_btn, _("convert to black & white with the color calibration module"));
   g_signal_connect(d->color_btn, "toggled", G_CALLBACK(_treatment_toggled), self);
   g_signal_connect(d->bw_btn, "toggled", G_CALLBACK(_treatment_toggled), self);
-  GtkWidget *treatment = gtk_label_new(_("treatment :"));
+  GtkWidget *treatment = gtk_label_new(_("Treatment :"));
   gtk_widget_set_name(treatment, "basicpanel-label");
   GtkWidget *tbox = dt_gui_hbox(treatment, dt_gui_expand(d->color_btn), dt_gui_expand(d->bw_btn));
   gtk_widget_set_name(tbox, "basicpanel-treatment");
@@ -478,7 +478,7 @@ void gui_init(dt_lib_module_t *self)
         gtk_widget_set_name(d->picker_btn, "basicpanel-picker");
 
         d->wb_combo = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-        dt_bauhaus_widget_set_label(d->wb_combo, NULL, N_("WB"));
+        dt_bauhaus_widget_set_label(d->wb_combo, NULL, N_("WB :"));
         for(int k = 0; k < G_N_ELEMENTS(_wb_presets); k++)
           dt_bauhaus_combobox_add(d->wb_combo, _(_wb_presets[k].name));
         gtk_widget_set_tooltip_text(d->wb_combo, _("white balance preset"));
@@ -487,16 +487,16 @@ void gui_init(dt_lib_module_t *self)
       }
       else if(section == DT_LSB_SECTION_TONE)
       {
-        d->auto_btn = dt_action_button_new(self, N_("auto"), _auto_tone_clicked, self,
+        d->auto_btn = dt_action_button_new(self, N_("Auto"), _auto_tone_clicked, self,
                                            _("automatic exposure, highlights and shadows"), 0, 0);
         gtk_widget_set_name(d->auto_btn, "basicpanel-auto");
         dt_gui_box_add(self->widget,
                        dt_gui_hbox(dt_gui_expand(gtk_label_new("")),
-                                   _section(C_("section", "tone")),
+                                   _section(C_("section", "Tone")),
                                    dt_gui_expand(gtk_label_new("")), d->auto_btn));
       }
       else
-        dt_gui_box_add(self->widget, _section(C_("section", "presence")));
+        dt_gui_box_add(self->widget, _section(C_("section", "Presence")));
     }
 
     const float def = i == DT_LSB_TEMP ? 5003.0f : 0.0f;
@@ -536,6 +536,7 @@ void gui_init(dt_lib_module_t *self)
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_HISTORY_CHANGE, _history_changed);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _history_changed);
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _history_changed);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED, _history_changed);
 }
 
 void gui_cleanup(dt_lib_module_t *self)

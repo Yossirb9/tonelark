@@ -1917,6 +1917,24 @@ void dtgtk_cairo_paint_altered(cairo_t *cr, const gint x, const gint y, const gi
   FINISH
 }
 
+void dtgtk_cairo_paint_pick_flag(cairo_t *cr, const gint x, const gint y, const gint w, const gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // pole
+  cairo_move_to(cr, 0.25, 0.08);
+  cairo_line_to(cr, 0.25, 0.95);
+  cairo_stroke(cr);
+  // flag
+  cairo_move_to(cr, 0.25, 0.1);
+  cairo_line_to(cr, 0.85, 0.3);
+  cairo_line_to(cr, 0.25, 0.52);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_tags(cairo_t *cr, const gint x, const gint y, const gint w, const gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)

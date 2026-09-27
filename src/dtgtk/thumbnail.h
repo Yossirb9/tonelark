@@ -88,6 +88,7 @@ typedef struct
   gchar *filename;
   gchar *info_line;
   gboolean is_altered;
+  gboolean is_picked;   // Lightroom-style pick flag (tag darktable|pick)
   gboolean has_audio;
   gboolean has_tags;
   gboolean is_grouped;
@@ -127,7 +128,8 @@ typedef struct
   GtkWidget *w_color;     // GtkDarktableThumbnailBtn -- Colorlabels "flower" icon
 
   GtkWidget *w_local_copy; // GtkDarktableThumbnailBtn -- localcopy triangle
-  GtkWidget *w_altered;    // GtkDarktableThumbnailBtn -- Altered icon
+  GtkWidget *w_altered;
+  GtkWidget *w_pick;    // GtkDarktableThumbnailBtn -- Altered icon
   GtkWidget *w_group;      // GtkDarktableThumbnailBtn -- Grouping icon
   GtkWidget *w_tags;       // GtkDarktableThumbnailBtn -- Tags icon
   GtkWidget *w_audio;      // GtkDarktableThumbnailBtn -- Audio sidecar icon

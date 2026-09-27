@@ -110,7 +110,7 @@
   <dtconfig prefs="misc" section="interface" common="yes">
     <name>ui/show_welcome_screen</name>
     <type>bool</type>
-    <default>true</default>
+    <default>false</default>
     <shortdescription>show welcome screen on next run</shortdescription>
     <longdescription>display the welcome setup screen the next time darktable is launched</longdescription>
   </dtconfig>
@@ -1300,35 +1300,35 @@
   <dtconfig>
     <name>plugins/lighttable/overlays/1/0</name>
     <type>int</type>
-    <default>0</default>
+    <default>3</default>
     <shortdescription>overlays for filmstrip at size 0 = none</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/overlays/1/1</name>
     <type>int</type>
-    <default>1</default>
+    <default>5</default>
     <shortdescription>overlays for filmstrip at size 1 = on hover</shortdescription>
     <longdescription/>
   </dtconfig>
     <dtconfig>
     <name>plugins/lighttable/overlays/1/2</name>
     <type>int</type>
-    <default>1</default>
+    <default>4</default>
     <shortdescription>overlays for filmstrip at size 2 = on hover</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/overlays/2/0</name>
     <type>int</type>
-    <default>0</default>
+    <default>3</default>
     <shortdescription>overlays for zomable lighttable at size 0 = none</shortdescription>
     <longdescription/>
   </dtconfig>
   <dtconfig>
     <name>plugins/lighttable/overlays/2/1</name>
     <type>int</type>
-    <default>1</default>
+    <default>3</default>
     <shortdescription>overlays for zomable lighttable at size 1 = on hover</shortdescription>
     <longdescription/>
   </dtconfig>
@@ -2432,6 +2432,18 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/styles/expanded</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>presets panel expanded</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/history/expanded</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>history panel expanded</shortdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/darkroom/basicpanel/expanded</name>
     <type>bool</type>
     <default>true</default>
@@ -3374,7 +3386,7 @@
         <option>histogram</option>
       </enum>
     </type>
-    <default>waveform</default>
+    <default>histogram</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
