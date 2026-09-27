@@ -956,22 +956,31 @@ char *version = g_strdup_printf(
   return version;
 }
 
+// --import-lightroom: import directly (scripts), a catalog given as a file to
+// open (double click): show the import dialog
+static gboolean _lightroom_catalog_interactive = FALSE;
+
 static gboolean _import_lightroom_catalog(gpointer data)
 {
   gchar *filename = data;
-  GError *error = NULL;
-  dt_lrcat_t *cat = dt_lrcat_open(filename, &error);
-  if(cat)
-  {
-    const dt_lrcat_options_t options = { .develop = TRUE, .metadata = TRUE,
-                                         .keywords = TRUE, .collections = TRUE,
-                                         .stacks = TRUE };
-    dt_lrcat_import(cat, &options, FALSE);
-  }
+  if(_lightroom_catalog_interactive)
+    dt_lrcat_import_interactive(filename);
   else
   {
-    dt_print(DT_DEBUG_ALWAYS, "[lightroom] %s", error ? error->message : filename);
-    g_clear_error(&error);
+    GError *error = NULL;
+    dt_lrcat_t *cat = dt_lrcat_open(filename, &error);
+    if(cat)
+    {
+      const dt_lrcat_options_t options = { .develop = TRUE, .metadata = TRUE,
+                                           .keywords = TRUE, .collections = TRUE,
+                                           .stacks = TRUE };
+      dt_lrcat_import(cat, &options, FALSE);
+    }
+    else
+    {
+      dt_print(DT_DEBUG_ALWAYS, "[lightroom] %s", error ? error->message : filename);
+      g_clear_error(&error);
+    }
   }
   g_free(filename);
   return G_SOURCE_REMOVE;
@@ -1432,6 +1441,19 @@ int dt_init(int argc,
         return usage(argv[0]); // fail on unrecognized options
       }
     }
+    else if(init_gui)
+    {
+      // Lightspeed: opening a Lightroom catalog (double click, open with)
+      // imports it
+      gchar *lower = g_ascii_strdown(argv[k], -1);
+      if(g_str_has_suffix(lower, ".lrcat"))
+      {
+        lightroom_catalog = argv[k];
+        _lightroom_catalog_interactive = TRUE;
+        argv[k] = NULL;
+      }
+      g_free(lower);
+    }
   }
 
   // remove the NULLs to not confuse gtk_init() later.
@@ -1654,9 +1676,9 @@ int dt_init(int argc,
           "%s\n"
           "\n"
           "please fix this and then run darktable again"), which_failed);
-      dt_gui_show_standalone_yes_no_dialog(_("darktable - unable to create directories"),
+      dt_gui_show_standalone_yes_no_dialog(_("Lightspeed - unable to create directories"),
                                            user_dirs_failure_text,
-                                           _("_quit darktable"),
+                                           _("_quit Lightspeed"),
                                            NULL);
       // There is no REAL need to free the string before exiting, but we do it
       // to avoid creating a code pattern that could be mistakenly copy-pasted

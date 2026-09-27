@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>המדריך של Lightspeed</title>
+<style>
+  :root {
+    --bg: #1e1e1e; --panel: #282828; --line: #3a3a3a;
+    --text: #d6d6d6; --dim: #9a9a9a; --accent: #5ea0ef; --key: #3b3b3b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+  }
+  header { background: #161616; border-bottom: 1px solid var(--line); padding: 28px 16px; }
+  header div, main { max-width: 900px; margin: 0 auto; }
+  h1 { margin: 0; font-weight: 400; font-size: 30px; color: #f0f0f0; }
+  header p { margin: 6px 0 0; color: var(--dim); }
+  main { padding: 8px 16px 60px; }
+  h2 { font-weight: 500; color: #f0f0f0; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-top: 40px; }
+  h3 { font-weight: 500; color: var(--accent); margin-bottom: 4px; }
+  a { color: var(--accent); }
+  nav { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 20px; margin-top: 20px; }
+  nav ol { margin: 0; padding-inline-start: 20px; columns: 2; }
+  kbd {
+    display: inline-block; min-width: 1.6em; text-align: center; direction: ltr;
+    background: var(--key); border: 1px solid #555; border-bottom-width: 2px; border-radius: 4px;
+    padding: 0 6px; font: 13px/1.6 Consolas, monospace; color: #eee;
+  }
+  code { direction: ltr; unicode-bidi: embed; background: var(--key); padding: 1px 5px; border-radius: 3px; font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: start; vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; }
+  .note { background: var(--panel); border-inline-start: 3px solid var(--accent); padding: 10px 14px; border-radius: 4px; }
+  .ltr { direction: ltr; unicode-bidi: embed; }
+  @media (max-width: 600px) { nav ol { columns: 1; } }
+</style>
+</head>
+<body>
+<header><div>
+  <h1>Lightspeed</h1>
+  <p>עורך תמונות בסגנון Lightroom, על המנוע של darktable. המדריך הזה מכסה את מה שצריך כדי לעבוד.</p>
+</div></header>
+<main>
+
+<nav><ol>
+  <li><a href="#install">התקנה ומחשבים נוספים</a></li>
+  <li><a href="#lightroom">פתיחת קטלוג Lightroom</a></li>
+  <li><a href="#library">Library: ייבוא ומיון</a></li>
+  <li><a href="#develop">Develop: עריכה</a></li>
+  <li><a href="#export">ייצוא</a></li>
+  <li><a href="#keys">קיצורי מקלדת</a></li>
+  <li><a href="#performance">ביצועים</a></li>
+  <li><a href="#data">איפה נשמרים הנתונים</a></li>
+</ol></nav>
+
+<h2 id="install">1. התקנה ומחשבים נוספים</h2>
+<p>יש שתי גרסאות, ושתיהן זהות:</p>
+<ul>
+  <li><b>מתקין</b> (<span class="ltr">Lightspeed-…-setup.exe</span>): יוצר קיצור דרך בתפריט התחל ובשולחן העבודה, ומוסיף "ייבוא ל-Lightspeed" בלחיצה ימנית על תיקייה או תמונה. בזמן ההתקנה אפשר לבחור התקנה לכל המשתמשים או רק למשתמש הנוכחי (בלי הרשאות מנהל).</li>
+  <li><b>גרסה ניידת</b> (<span class="ltr">…-portable.zip</span>): מחלצים לכל תיקייה, גם לדיסק און קי, ומריצים את <code>Lightspeed\bin\Lightspeed.exe</code>.</li>
+</ul>
+<p>התוכנה לא נבנתה למעבד מסוים, ולכן היא רצה על כל מחשב Windows 10/11 של 64 ביט. במחשב חזק יותר היא מנצלת אוטומטית את כל ליבות המעבד ואת כרטיס המסך (ראו <a href="#performance">ביצועים</a>).</p>
+
+<h2 id="lightroom">2. פתיחת קטלוג Lightroom</h2>
+<p>הפרויקטים הקיימים שלך עוברים כמו שהם, והקבצים המקוריים לא משתנים. יש שתי דרכים:</p>
+<ol>
+  <li>לחיצה כפולה על קובץ ה-<code>.lrcat</code> (אם בזמן ההתקנה נבחרה האפשרות לפתוח קטלוגים של Lightroom), או לחיצה ימנית ואז "פתח באמצעות" ו-Lightspeed.</li>
+  <li>בתוך התוכנה: <b>Library</b>, אחר כך הפאנל <b>Import</b> משמאל, ואז הכפתור <b>Lightroom catalog...</b>. בוחרים את הקטלוג ומסמנים מה לייבא.</li>
+</ol>
+<p>מה עובר מהקטלוג:</p>
+<table>
+  <tr><th>ארגון</th><td>התיקיות, הדירוג בכוכבים, דגלי Pick ו-Reject, תוויות הצבע, מילות המפתח (כולל ההיררכיה), ה-Collections, ה-Virtual Copies וה-Stacks, וגם כותרת, תיאור, יוצר, זכויות יוצרים ו-GPS.</td></tr>
+  <tr><th>עריכה</th><td>חיתוך וזווית, סיבוב, White Balance, ‏Exposure, ‏Contrast, ‏Highlights, ‏Shadows, ‏Whites, ‏Blacks, ‏Texture, ‏Clarity, ‏Dehaze, ‏Vibrance, ‏Saturation, ‏Tone Curve, ‏HSL, ‏Color Grading / Split Toning, שחור-לבן, Vignette, ‏Grain, חידוד, הפחתת רעש, תיקון עדשה ו-CA, והסרת כתמים (Spot Removal).</td></tr>
+  <tr><th>לא עובר</th><td>התאמות מקומיות (מברשות, מסננים הדרגתיים ומסכות AI), פרופילי צבע של Adobe ותיקוני Upright. את אלה עושים מחדש עם הכלים המקבילים ב-Lightspeed.</td></tr>
+</table>
+<p class="note">הקטלוג עצמו נפתח לקריאה בלבד ולא משתנה, כך שאפשר להמשיך לפתוח אותו גם ב-Lightroom. אם התמונות הועברו לכונן אחר, הכלי שואל איפה הן נמצאות עכשיו.</p>
+
+<h2 id="library">3. Library: ייבוא ומיון</h2>
+<ul>
+  <li><b>ייבוא:</b> הכפתור <b>Import...</b> בפינה השמאלית התחתונה, או <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>. התמונות נשארות במקום שלהן ולא מועתקות, אלא אם בחרת להעתיק.</li>
+  <li><b>מיון:</b> כוכבים <kbd>0</kbd> עד <kbd>5</kbd>, ‏Pick עם <kbd>P</kbd>, ‏Reject עם <kbd>X</kbd>, ביטול דגל עם <kbd>U</kbd>, ותוויות צבע <kbd>6</kbd> עד <kbd>9</kbd>. על תמונה שסומנה כ-Pick מופיע דגל לבן בפינה.</li>
+  <li><b>סינון:</b> הסרגל שמעל התמונות מסנן לפי כוכבים וצבע, וב-Collections משמאל אפשר לסנן לפי תיקייה, תאריך, מילת מפתח, מצלמה ועוד.</li>
+  <li><b>השוואה:</b> <kbd>N</kbd> או <kbd>C</kbd> מציגים כמה תמונות זו לצד זו, ו-<kbd>E</kbd> מציג תמונה אחת בגדול.</li>
+  <li><b>Sync Settings</b> (בפינה הימנית התחתונה): מעתיק את העריכה של התמונה הראשית לכל שאר התמונות שנבחרו.</li>
+</ul>
+
+<h2 id="develop">4. Develop: עריכה</h2>
+<p>לחיצה כפולה על תמונה, או <kbd>D</kbd>, פותחת אותה לעריכה. הפאנל <b>Basic</b> מימין מקביל ל-Basic של Lightroom: ‏Treatment (צבע או שחור-לבן), ‏WB עם טפטפת ורשימת מצבים (As Shot, Daylight ועוד), ‏Temp, ‏Tint, ‏Tone עם כפתור Auto, ו-Presence.</p>
+<ul>
+  <li>מתחת ל-Basic נמצאים שאר הכלים לפי הסדר של Lightroom. הכפתורים שמעל הרשימה מסננים לפי קבוצות, ושורת החיפוש מוצאת כל כלי לפי שם.</li>
+  <li><b>לפני/אחרי:</b> <kbd>\</kbd> מציג את התמונה המקורית, ו-<kbd>Y</kbd> מפצל את התמונה לפני ואחרי. לחיצה נוספת מחזירה לתצוגה הרגילה.</li>
+  <li><b>משמאל:</b> ‏Navigator, ‏Presets (לחיצה כפולה מחילה), ‏Snapshots, ‏History (לחיצה על שלב מחזירה אליו), ו-Collections.</li>
+  <li><b>למטה משמאל:</b> ‏Copy... ו-Paste מעתיקים ומדביקים עריכה בין תמונות.</li>
+  <li><b>למטה מימין:</b> ‏Previous מחיל את העריכה של התמונה הקודמת, ו-Reset מחזיר את התמונה למצב המקורי (<kbd>Ctrl</kbd>+<kbd>Z</kbd> מבטל).</li>
+  <li><b>חיתוך:</b> <kbd>R</kbd>. ‏<b>הסרת כתמים:</b> <kbd>Q</kbd>. ‏<b>זום:</b> <kbd>Z</kbd> או <kbd>רווח</kbd>.</li>
+  <li>כל העריכות לא הרסניות. הקובץ המקורי לא משתנה, והעריכה נשמרת בספרייה ובקובץ <code>.xmp</code> שליד התמונה.</li>
+</ul>
+
+<h2 id="export">5. ייצוא</h2>
+<ol>
+  <li>בוחרים תמונות ב-Library (<kbd>Ctrl</kbd>+<kbd>A</kbd> בוחר הכול).</li>
+  <li>פותחים את הפאנל <b>Export</b> מימין, או לוחצים על הכפתור <b>Export...</b> למטה משמאל.</li>
+  <li>בוחרים פורמט: JPEG, ‏TIFF (8, 16 או 32 ביט), PNG, ‏WebP, ‏AVIF, ‏JPEG XL, ‏HEIF, ‏JPEG 2000, ‏EXR, ‏PDF ועוד. בוחרים גם גודל, איכות ופרופיל צבע (sRGB לרשת, Adobe RGB להדפסה).</li>
+  <li>לוחצים <b>start export</b>, או <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>.</li>
+</ol>
+<p>הקבצים נשמרים כברירת מחדל בתיקייה <code>Lightspeed Export</code> שליד התמונות המקוריות. אפשר לשנות את זה בשדה התיקייה בפאנל. נתוני המצלמה (EXIF), הדירוג ומילות המפתח נשמרים בקובץ המיוצא.</p>
+
+<h2 id="keys">6. קיצורי מקלדת</h2>
+<p>הקיצורים כבר מוגדרים כמו ב-Lightroom. אפשר לראות ולשנות את כולם בלחיצה על סמל המקלדת שבסרגל העליון.</p>
+<table>
+  <tr><th>מקש</th><th>פעולה</th><th>מקש</th><th>פעולה</th></tr>
+  <tr><td><kbd>G</kbd></td><td>Library (רשת)</td><td><kbd>D</kbd></td><td>Develop</td></tr>
+  <tr><td><kbd>E</kbd></td><td>תמונה אחת בגדול</td><td><kbd>N</kbd> / <kbd>C</kbd></td><td>השוואה</td></tr>
+  <tr><td><kbd>0</kbd>–<kbd>5</kbd></td><td>דירוג</td><td><kbd>6</kbd>–<kbd>9</kbd></td><td>אדום, צהוב, ירוק, כחול</td></tr>
+  <tr><td><kbd>P</kbd> / <kbd>X</kbd> / <kbd>U</kbd></td><td>Pick / ‏Reject / ביטול</td><td><kbd>Ctrl</kbd>+<kbd>'</kbd></td><td>Virtual Copy</td></tr>
+  <tr><td><kbd>\</kbd></td><td>לפני/אחרי</td><td><kbd>Y</kbd></td><td>לפני/אחרי מפוצל</td></tr>
+  <tr><td><kbd>R</kbd></td><td>חיתוך</td><td><kbd>Q</kbd></td><td>הסרת כתמים</td></tr>
+  <tr><td><kbd>W</kbd></td><td>טפטפת White Balance</td><td><kbd>J</kbd></td><td>הצגת אזורים שרופים</td></tr>
+  <tr><td><kbd>V</kbd></td><td>שחור-לבן</td><td><kbd>Z</kbd></td><td>זום</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>העתקה והדבקה של עריכה</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>V</kbd></td><td>העתקה והדבקה סלקטיביות</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>ביטול</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>ביצוע מחדש</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td>ייבוא</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td><td>ייצוא</td></tr>
+  <tr><td><kbd>Tab</kbd></td><td>הסתרה והצגה של הפאנלים</td><td><kbd>F11</kbd></td><td>מסך מלא</td></tr>
+</table>
+
+<h2 id="performance">7. ביצועים</h2>
+<ul>
+  <li>המעבד: כל הליבות בשימוש אוטומטי.</li>
+  <li>כרטיס המסך (OpenCL): מופעל אוטומטית אם הכרטיס תומך בזה, וזה משמעותית מהיר יותר. ההגדרה נמצאת בהגדרות (סמל גלגל השיניים), בלשונית processing.</li>
+  <li>במחשב חלש אפשר להגדיר בלשונית processing את <b>performance</b> ל-<b>small</b>. במחשב עם הרבה זיכרון וכרטיס מסך חזק כדאי לבחור <b>large</b>.</li>
+  <li>בפעם הראשונה שפותחים תיקייה גדולה התוכנה מייצרת תמונות ממוזערות, וזה לוקח קצת זמן. אחר כך הכול מהיר.</li>
+</ul>
+
+<h2 id="data">8. איפה נשמרים הנתונים</h2>
+<ul>
+  <li>הספרייה (הדירוגים והעריכות של כל התמונות) וההגדרות נמצאות ב-<code>%LOCALAPPDATA%\lightspeed</code>. כדאי לגבות את התיקייה הזאת.</li>
+  <li>ליד כל תמונה נשמר גם קובץ <code>.xmp</code> עם העריכה. לכן במחשב אחר מספיק לייבא את תיקיית התמונות, והעריכות מגיעות איתה.</li>
+  <li>הסרת התוכנה לא מוחקת את הספרייה ולא את התמונות.</li>
+</ul>
+
+<p style="color:var(--dim);margin-top:40px">Lightspeed מבוסס על darktable (רישיון GPL v3). קוד המקור של darktable זמין ב-<span class="ltr">github.com/darktable-org/darktable</span>.</p>
+</main>
+</body>
+</html>

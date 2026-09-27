@@ -582,7 +582,7 @@ void dt_gui_preferences_show()
   dt_stop_backthumbs_crawler(FALSE);
   GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
   _preferences_dialog =
-    gtk_dialog_new_with_buttons(_("darktable preferences"), win,
+    gtk_dialog_new_with_buttons(_("Lightspeed preferences"), win,
                                 GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                 NULL, NULL);
   dt_gui_dialog_restore_size(GTK_DIALOG(_preferences_dialog), "preferences");
@@ -648,7 +648,7 @@ void dt_gui_preferences_show()
   gtk_widget_destroy(_preferences_dialog);
 
   if(restart_required)
-    dt_control_log(_("darktable needs to be restarted for settings to take effect"));
+    dt_control_log(_("Lightspeed needs to be restarted for settings to take effect"));
 
   dt_start_backthumbs_crawler();
   DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_PREFERENCES_CHANGE);

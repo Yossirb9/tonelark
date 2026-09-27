@@ -23,3 +23,5 @@ z=views/darkroom/zoom close-up
 e;shift;ctrl=lib/export/start export
 z;shift;ctrl=views/darkroom/redo
 z;shift;ctrl=views/lighttable/redo
+i;shift;ctrl=lib/import/add to library...
+apostrophe;ctrl=lib/image/duplicate

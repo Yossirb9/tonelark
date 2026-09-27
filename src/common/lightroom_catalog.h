@@ -86,6 +86,10 @@ void dt_lrcat_close(dt_lrcat_t *cat);
     the call blocks until the import is done (used by darktable-cli tests) */
 void dt_lrcat_import(dt_lrcat_t *cat, const dt_lrcat_options_t *options, const gboolean wait);
 
+// open the catalog and show the import dialog (summary, folders of the photos
+// on this computer, options), then import in the background
+void dt_lrcat_import_interactive(const char *filename);
+
 /** run the import in the calling thread (no progress UI). returns the number of
     imported images, used by the job and by tests */
 int dt_lrcat_import_run(dt_lrcat_t *cat, const dt_lrcat_options_t *options,

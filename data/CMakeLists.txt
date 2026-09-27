@@ -136,6 +136,11 @@ FILE(COPY shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
 
 #
+# Lightspeed user guide
+#
+install(FILES lightspeed/guide.html DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/lightspeed COMPONENT DTApplication)
+
+#
 # Install noiseprofiles
 #
 if(${VALIDATE_JSON})
