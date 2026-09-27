@@ -19,6 +19,7 @@
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/file_location.h"
+#include "common/lightroom_catalog.h"
 #include "common/exif.h"
 #include "common/metadata.h"
 #include "common/datetime.h"
@@ -2373,6 +2374,207 @@ void init(dt_lib_module_t *self)
 }
 #endif
 
+// ---------------------------------------------------------------------------
+// Lightspeed: import of Lightroom catalogs
+
+typedef struct _lrcat_dialog_t
+{
+  dt_lrcat_t *cat;
+  GtkWidget *found_label;
+  GPtrArray *root_labels;
+} _lrcat_dialog_t;
+
+static void _lrcat_update_found(_lrcat_dialog_t *dd)
+{
+  const int found = dt_lrcat_count_found(dd->cat);
+  const int masters = dd->cat->n_images - dd->cat->n_virtual_copies;
+  gchar *txt = g_strdup_printf(_("%d of %d photos found on this computer"), found, masters);
+  gtk_label_set_text(GTK_LABEL(dd->found_label), txt);
+  g_free(txt);
+
+  for(guint k = 0; k < dd->cat->roots->len; k++)
+  {
+    dt_lrcat_root_t *r = g_ptr_array_index(dd->cat->roots, k);
+    GtkWidget *l = g_ptr_array_index(dd->root_labels, k);
+    gchar *t = g_strdup_printf(_("%d / %d found"), r->n_found, r->n_images);
+    gtk_label_set_text(GTK_LABEL(l), t);
+    g_free(t);
+  }
+}
+
+static void _lrcat_root_folder_set(GtkFileChooserButton *button, _lrcat_dialog_t *dd)
+{
+  dt_lrcat_root_t *r = g_object_get_data(G_OBJECT(button), "lrcat-root");
+  gchar *folder = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(button));
+  if(r && folder)
+  {
+    dt_lrcat_set_root_folder(dd->cat, r, folder);
+    _lrcat_update_found(dd);
+  }
+  g_free(folder);
+}
+
+static GtkWidget *_lrcat_check(const char *label, const char *conf)
+{
+  GtkWidget *w = gtk_check_button_new_with_label(label);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(w),
+                               dt_conf_key_exists(conf) ? dt_conf_get_bool(conf) : TRUE);
+  g_object_set_data(G_OBJECT(w), "lrcat-conf", (gpointer)conf);
+  return w;
+}
+
+static gboolean _lrcat_check_get(GtkWidget *w)
+{
+  const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w));
+  dt_conf_set_bool(g_object_get_data(G_OBJECT(w), "lrcat-conf"), active);
+  return active;
+}
+
+static void _lib_import_lightroom_callback(GtkWidget *widget, dt_lib_module_t *self)
+{
+  GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+
+  GtkFileChooserNative *chooser = gtk_file_chooser_native_new(
+    _("select a Lightroom catalog"), win, GTK_FILE_CHOOSER_ACTION_OPEN,
+    _("_open"), _("_cancel"));
+  GtkFileFilter *filter = gtk_file_filter_new();
+  gtk_file_filter_add_pattern(filter, "*.lrcat");
+  gtk_file_filter_add_pattern(filter, "*.LRCAT");
+  gtk_file_filter_set_name(filter, _("Lightroom catalogs"));
+  gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
+
+  gchar *last = dt_conf_get_string("ui_last/lightroom_catalog_folder");
+  if(last && *last && g_file_test(last, G_FILE_TEST_IS_DIR))
+    gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), last);
+  else
+  {
+    // Lightroom's default location
+    gchar *def = g_build_filename(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES),
+                                  "Lightroom", NULL);
+    if(g_file_test(def, G_FILE_TEST_IS_DIR))
+      gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), def);
+    g_free(def);
+  }
+  g_free(last);
+
+  gchar *filename = NULL;
+  if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
+    filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+  g_object_unref(chooser);
+  if(!filename) return;
+
+  gchar *dir = g_path_get_dirname(filename);
+  dt_conf_set_string("ui_last/lightroom_catalog_folder", dir);
+  g_free(dir);
+
+  dt_control_log(_("reading Lightroom catalog..."));
+  dt_gui_process_events();
+
+  GError *error = NULL;
+  dt_lrcat_t *cat = dt_lrcat_open(filename, &error);
+  g_free(filename);
+  if(!cat)
+  {
+    dt_control_log("%s", error ? error->message : _("cannot read the Lightroom catalog"));
+    g_clear_error(&error);
+    return;
+  }
+
+  _lrcat_dialog_t dd = { .cat = cat, .root_labels = g_ptr_array_new() };
+
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("import Lightroom catalog"), win,
+                                                  GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                  _("_cancel"), GTK_RESPONSE_CANCEL,
+                                                  _("_import"), GTK_RESPONSE_ACCEPT, NULL);
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+  GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_container_set_border_width(GTK_CONTAINER(area), DT_PIXEL_APPLY_DPI(10));
+  gtk_box_set_spacing(GTK_BOX(area), DT_PIXEL_APPLY_DPI(6));
+
+  gchar *base = g_path_get_basename(cat->filename);
+  gchar *summary = g_strdup_printf(_("<b>%s</b>\n%d photos, %d virtual copies, %d keywords, %d collections"),
+                                   base, cat->n_images - cat->n_virtual_copies,
+                                   cat->n_virtual_copies, cat->n_keywords, cat->n_collections);
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(label), summary);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  g_free(summary);
+  g_free(base);
+  gtk_box_pack_start(GTK_BOX(area), label, FALSE, FALSE, 0);
+
+  GtkWidget *hint = gtk_label_new(_("photos stay where they are. the catalog is only read, never changed.\n"
+                                    "if photos were moved (another drive or computer), choose their new folder."));
+  gtk_label_set_xalign(GTK_LABEL(hint), 0.0f);
+  gtk_box_pack_start(GTK_BOX(area), hint, FALSE, FALSE, 0);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(10));
+  gtk_grid_set_row_spacing(GTK_GRID(grid), DT_PIXEL_APPLY_DPI(4));
+  for(guint k = 0; k < cat->roots->len; k++)
+  {
+    dt_lrcat_root_t *r = g_ptr_array_index(cat->roots, k);
+    GtkWidget *name = gtk_label_new(r->absolute_path);
+    gtk_label_set_xalign(GTK_LABEL(name), 0.0f);
+    gtk_label_set_ellipsize(GTK_LABEL(name), PANGO_ELLIPSIZE_START);
+    gtk_label_set_max_width_chars(GTK_LABEL(name), 45);
+    gtk_widget_set_tooltip_text(name, r->absolute_path);
+
+    GtkWidget *count = gtk_label_new("");
+    g_ptr_array_add(dd.root_labels, count);
+
+    GtkWidget *button = gtk_file_chooser_button_new(_("select the folder"),
+                                                    GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
+    if(r->resolved)
+      gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(button), r->resolved);
+    g_object_set_data(G_OBJECT(button), "lrcat-root", r);
+    g_signal_connect(button, "file-set", G_CALLBACK(_lrcat_root_folder_set), &dd);
+    gtk_widget_set_tooltip_text(button, _("folder containing these photos on this computer"));
+
+    gtk_grid_attach(GTK_GRID(grid), name, 0, k, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), count, 1, k, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), button, 2, k, 1, 1);
+  }
+  gtk_box_pack_start(GTK_BOX(area), grid, FALSE, FALSE, 0);
+
+  dd.found_label = gtk_label_new("");
+  gtk_label_set_xalign(GTK_LABEL(dd.found_label), 0.0f);
+  gtk_box_pack_start(GTK_BOX(area), dd.found_label, FALSE, FALSE, 0);
+
+  GtkWidget *develop = _lrcat_check(_("develop settings (exposure, white balance, crop, curves...)"),
+                                    "plugins/lighttable/lrcat/develop");
+  GtkWidget *metadata = _lrcat_check(_("ratings, flags, color labels, titles, captions and locations"),
+                                     "plugins/lighttable/lrcat/metadata");
+  GtkWidget *keywords = _lrcat_check(_("keywords as tags"), "plugins/lighttable/lrcat/keywords");
+  GtkWidget *collections = _lrcat_check(_("collections as tags (under \"Lightroom collections\")"),
+                                        "plugins/lighttable/lrcat/collections");
+  GtkWidget *stacks = _lrcat_check(_("stacks as groups"), "plugins/lighttable/lrcat/stacks");
+  gtk_box_pack_start(GTK_BOX(area), develop, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(area), metadata, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(area), keywords, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(area), collections, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(area), stacks, FALSE, FALSE, 0);
+
+  _lrcat_update_found(&dd);
+  gtk_widget_show_all(dialog);
+
+  const int res = gtk_dialog_run(GTK_DIALOG(dialog));
+  const dt_lrcat_options_t options = { .develop = _lrcat_check_get(develop),
+                                       .metadata = _lrcat_check_get(metadata),
+                                       .keywords = _lrcat_check_get(keywords),
+                                       .collections = _lrcat_check_get(collections),
+                                       .stacks = _lrcat_check_get(stacks) };
+  gtk_widget_destroy(dialog);
+  g_ptr_array_free(dd.root_labels, TRUE);
+
+  if(res == GTK_RESPONSE_ACCEPT && dt_lrcat_count_found(cat) > 0)
+    dt_lrcat_import(cat, &options, FALSE);  // takes ownership
+  else
+  {
+    if(res == GTK_RESPONSE_ACCEPT) dt_control_log(_("no photo of the catalog was found"));
+    dt_lrcat_close(cat);
+  }
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
@@ -2396,7 +2598,13 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_can_focus(widget, TRUE);
   gtk_widget_set_receives_default(widget, TRUE);
 
-  self->widget = dt_gui_vbox(dt_gui_hbox(d->import_inplace, widget));
+  GtkWidget *lrcat = dt_action_button_new
+    (self, N_("Lightroom catalog..."),
+     _lib_import_lightroom_callback, self,
+     _("import the photos of an Adobe Lightroom catalog (.lrcat) with their "
+       "develop settings, ratings, flags, labels, keywords and collections"), 0, 0);
+
+  self->widget = dt_gui_vbox(dt_gui_hbox(d->import_inplace, widget), lrcat);
   
 #ifdef HAVE_GPHOTO2
   /* add devices container for cameras */

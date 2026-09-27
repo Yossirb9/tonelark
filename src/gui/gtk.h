@@ -409,6 +409,16 @@ static inline GtkWidget *dt_ui_section_label_new(const gchar *str)
   return label;
 };
 
+// panel titles are shown capitalized like Lightroom panels ("Tone curve")
+static inline gchar *dt_ui_panel_title(const gchar *str)
+{
+  if(!str || !*str) return g_strdup(str ? str : "");
+  const gunichar first = g_unichar_totitle(g_utf8_get_char(str));
+  char buf[8] = { 0 };
+  g_unichar_to_utf8(first, buf);
+  return g_strconcat(buf, g_utf8_next_char(str), NULL);
+}
+
 static inline GtkWidget *dt_ui_label_new(const gchar *str)
 {
   GtkWidget *label = gtk_label_new(str);

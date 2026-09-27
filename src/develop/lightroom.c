@@ -17,6 +17,8 @@
 */
 
 #include "develop/lightroom.h"
+#include "develop/lightspeed.h"
+#include "common/iop_order.h"
 #include "common/colorlabels.h"
 #include "common/colorspaces.h"
 #include "common/curve_tools.h"
@@ -443,6 +445,9 @@ typedef struct lr_data_t
   float crop_roundness;        // from lightroom
   int iwidth, iheight;         // image width / height
   dt_exif_image_orientation_t orientation;
+
+  dt_lightroom_import_flags_t flags; // what to import
+  GHashTable *crs;             // all scalar settings, name -> value
 } lr_data_t;
 
 // three helper functions for parsing RetouchInfo entries. sscanf doesn't work due to floats.
@@ -488,6 +493,9 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
 {
   const float hfactor = 3.0 / 9.0; // hue factor adjustment (use 3 out of 9 boxes in colorzones)
   const float lfactor = 4.0 / 9.0; // lightness factor adjustment (use 4 out of 9 boxes in colorzones)
+
+  if(value && data->crs)
+    g_hash_table_replace(data->crs, g_strdup((const char *)name), g_strdup((const char *)value));
 
   if(value)
   {
@@ -884,7 +892,10 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
     else if(!xmlStrcmp(name, (const xmlChar *)"Label"))
     {
       char *v = g_utf8_casefold((char *)value, -1);
-      if(!g_strcmp0(v, _("red")))
+      const int lr_label = dt_lightroom_color_label((char *)value);
+      if(lr_label >= 0)
+        data->color = lr_label;
+      else if(!g_strcmp0(v, _("red")))
         data->color = 0;
       else if(!g_strcmp0(v, _("yellow")))
         data->color = 1;
@@ -902,8 +913,9 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
       g_free(v);
     }
   }
-  if(dev == NULL && (!xmlStrcmp(name, (const xmlChar *)"subject")
-                     || !xmlStrcmp(name, (const xmlChar *)"hierarchicalSubject")))
+  if((data->flags & DT_LR_IMPORT_TAGS)
+     && (!xmlStrcmp(name, (const xmlChar *)"subject")
+         || !xmlStrcmp(name, (const xmlChar *)"hierarchicalSubject")))
   {
     xmlNodePtr tagNode = node;
 
@@ -924,7 +936,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
     }
     if(tag_change) DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_TAG_CHANGED);
   }
-  else if(dev != NULL && !xmlStrcmp(name, (const xmlChar *)"RetouchInfo"))
+  else if((data->flags & DT_LR_IMPORT_DEVELOP) && !xmlStrcmp(name, (const xmlChar *)"RetouchInfo"))
   {
     xmlNodePtr riNode = node;
 
@@ -962,7 +974,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
       riNode = riNode->next;
     }
   }
-  else if(dev != NULL && !xmlStrcmp(name, (const xmlChar *)"ToneCurvePV2012"))
+  else if((data->flags & DT_LR_IMPORT_DEVELOP) && !xmlStrcmp(name, (const xmlChar *)"ToneCurvePV2012"))
   {
     xmlNodePtr tcNode = node;
 
@@ -980,7 +992,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
       tcNode = tcNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"title"))
+  else if((data->flags & DT_LR_IMPORT_METADATA) && !xmlStrcmp(name, (const xmlChar *)"title"))
   {
     xmlNodePtr ttlNode = node;
     while(ttlNode)
@@ -994,7 +1006,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
       ttlNode = ttlNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"description"))
+  else if((data->flags & DT_LR_IMPORT_METADATA) && !xmlStrcmp(name, (const xmlChar *)"description"))
   {
     xmlNodePtr desNode = node;
     while(desNode)
@@ -1008,7 +1020,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
       desNode = desNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"creator"))
+  else if((data->flags & DT_LR_IMPORT_METADATA) && !xmlStrcmp(name, (const xmlChar *)"creator"))
   {
     xmlNodePtr creNode = node;
     while(creNode)
@@ -1022,7 +1034,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const dt_imgid_t
       creNode = creNode->next;
     }
   }
-  else if(dev == NULL && !xmlStrcmp(name, (const xmlChar *)"rights"))
+  else if((data->flags & DT_LR_IMPORT_METADATA) && !xmlStrcmp(name, (const xmlChar *)"rights"))
   {
     xmlNodePtr rigNode = node;
     while(rigNode)
@@ -1122,36 +1134,425 @@ static inline float round5(const double x)
   return round(x * 100000.f) / 100000.f;
 }
 
-gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto)
+// ---------------------------------------------------------------------------
+// Lightspeed: Lightroom develop settings mapped onto current darktable modules
+// ---------------------------------------------------------------------------
+
+int dt_lightroom_color_label(const char *label)
+{
+  if(!label || !*label) return -1;
+
+  // Lightroom stores the (localized, user renamable) label text
+  static const struct { const char *name; int color; } labels[] =
+  {
+    { "red", 0 }, { "yellow", 1 }, { "green", 2 }, { "blue", 3 }, { "purple", 4 },
+    // de, fr, es, it, nl, pt, sv
+    { "rot", 0 }, { "gelb", 1 }, { "grün", 2 }, { "blau", 3 }, { "lila", 4 }, { "violett", 4 },
+    { "rouge", 0 }, { "jaune", 1 }, { "vert", 2 }, { "bleu", 3 }, { "violet", 4 },
+    { "rojo", 0 }, { "amarillo", 1 }, { "verde", 2 }, { "azul", 3 }, { "morado", 4 }, { "púrpura", 4 },
+    { "rosso", 0 }, { "giallo", 1 }, { "blu", 3 }, { "viola", 4 },
+    { "rood", 0 }, { "geel", 1 }, { "groen", 2 }, { "blauw", 3 }, { "paars", 4 },
+    { "vermelho", 0 }, { "amarelo", 1 }, { "roxo", 4 },
+    { "röd", 0 }, { "gul", 1 }, { "grön", 2 }, { "blå", 3 },
+    // he, ru, ja
+    { "אדום", 0 }, { "צהוב", 1 }, { "ירוק", 2 }, { "כחול", 3 }, { "סגול", 4 },
+    { "красный", 0 }, { "желтый", 1 }, { "жёлтый", 1 }, { "зеленый", 2 }, { "зелёный", 2 },
+    { "синий", 3 }, { "фиолетовый", 4 },
+    { "レッド", 0 }, { "イエロー", 1 }, { "グリーン", 2 }, { "ブルー", 3 }, { "パープル", 4 },
+    { NULL, -1 }
+  };
+
+  gchar *folded = g_utf8_casefold(label, -1);
+  gchar *stripped = g_strstrip(folded);
+  int color = -1;
+  for(int k = 0; labels[k].name; k++)
+  {
+    gchar *name = g_utf8_casefold(labels[k].name, -1);
+    const gboolean same = !g_strcmp0(stripped, name);
+    g_free(name);
+    if(same)
+    {
+      color = labels[k].color;
+      break;
+    }
+  }
+  g_free(folded);
+  return color;
+}
+
+// insert a history item with params of the current module version
+static void _add_hist_module(const dt_imgid_t imgid,
+                             const dt_iop_module_t *module,
+                             const void *params,
+                             const int multi_priority,
+                             const char *multi_name,
+                             char *imported,
+                             const size_t imported_len,
+                             int *import_count)
+{
+  int32_t num = 0;
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "SELECT COUNT(*) FROM main.history WHERE imgid = ?1", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW) num = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "INSERT INTO main.history"
+                              "  (imgid, num, module, operation, op_params, enabled,"
+                              "   blendop_params, blendop_version, multi_priority, multi_name,"
+                              "   multi_name_hand_edited)"
+                              " VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9, ?10)",
+                              -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, module->version());
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, module->op, -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 5, params, module->params_size, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, module->default_blendop_params,
+                             sizeof(dt_develop_blend_params_t), SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, dt_develop_blend_version());
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, multi_priority);
+  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 9, multi_name && *multi_name ? multi_name : "",
+                             -1, SQLITE_TRANSIENT);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 10, multi_name && *multi_name ? 1 : 0);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  // clang-format off
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                              "UPDATE main.images"
+                              " SET history_end = (SELECT IFNULL(MAX(num) + 1, 0)"
+                              "                    FROM main.history"
+                              "                    WHERE imgid = ?1)"
+                              " WHERE id = ?1", -1, &stmt, NULL);
+  // clang-format on
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
+  if(imported[0]) g_strlcat(imported, ", ", imported_len);
+  g_strlcat(imported, module->name(), imported_len);
+  (*import_count)++;
+}
+
+// a new module instance must be part of the image's module order list,
+// otherwise its history item is dropped when the history is loaded
+static void _ensure_iop_order_instance(const dt_imgid_t imgid, const char *op, const int instance)
+{
+  GList *order = dt_ioppr_get_iop_order_list(imgid, TRUE);
+  if(!order) return;
+
+  if(!dt_ioppr_get_iop_order_link(order, op, instance))
+  {
+    GList *base = dt_ioppr_get_iop_order_link(order, op, 0);
+    if(base)
+    {
+      dt_iop_order_entry_t *entry = malloc(sizeof(dt_iop_order_entry_t));
+      memcpy(entry, base->data, sizeof(dt_iop_order_entry_t));
+      entry->instance = instance;
+      // right after (above in the pipe) the first instance
+      order = g_list_insert_before(order, base->next, entry);
+      int k = 1;
+      for(GList *l = order; l; l = g_list_next(l))
+        ((dt_iop_order_entry_t *)l->data)->o.iop_order = k++;
+      dt_ioppr_write_iop_order_list(order, imgid);
+    }
+  }
+  dt_ioppr_iop_order_list_free(order);
+}
+
+// params buffers of the modules touched by the import, one per instance
+typedef struct _lr_module_params_t
+{
+  dt_iop_module_t *module;   // module giving defaults / version
+  const char *instance;      // dedicated instance name or NULL
+  void *params;
+} _lr_module_params_t;
+
+#define LR_MAX_MODULES 16
+
+typedef struct _lr_develop_t
+{
+  dt_develop_t *dev;
+  GHashTable *crs;
+  _lr_module_params_t mod[LR_MAX_MODULES];
+  int count;
+} _lr_develop_t;
+
+static const char *_crs(_lr_develop_t *d, const char *key)
+{
+  return g_hash_table_lookup(d->crs, key);
+}
+
+static gboolean _crs_float(_lr_develop_t *d, const char *key, float *value)
+{
+  const char *v = _crs(d, key);
+  if(!v || !*v) return FALSE;
+  char *end = NULL;
+  const double f = g_ascii_strtod(v, &end);
+  if(end == v) return FALSE;
+  *value = (float)f;
+  return TRUE;
+}
+
+static gboolean _crs_bool(_lr_develop_t *d, const char *key)
+{
+  const char *v = _crs(d, key);
+  return v && (!g_ascii_strcasecmp(v, "true") || !g_strcmp0(v, "1"));
+}
+
+// params of a module (or dedicated instance), started from the "Lightroom
+// neutral" state of the module the first time it is needed
+static void *_lr_params(_lr_develop_t *d, const char *op, const char *instance)
+{
+  for(int k = 0; k < d->count; k++)
+    if(dt_iop_module_is(d->mod[k].module, op) && !g_strcmp0(d->mod[k].instance, instance))
+      return d->mod[k].params;
+
+  if(d->count >= LR_MAX_MODULES) return NULL;
+
+  dt_iop_module_t *m = dt_iop_get_module_from_list(d->dev->iop, op);
+  if(!m) return NULL;
+
+  const dt_lsb_control_t *c = NULL;
+  for(int i = 0; i < DT_LSB_COUNT; i++)
+    if(!g_strcmp0(dt_lsb_control(i)->op, op)
+       && !g_strcmp0(dt_lsb_control(i)->instance, instance))
+      c = dt_lsb_control(i);
+
+  void *params = g_malloc(m->params_size);
+  if(c)
+    dt_lsb_neutralize_params(m, c, params);
+  else
+    memcpy(params, m->default_params, m->params_size);
+
+  d->mod[d->count].module = m;
+  d->mod[d->count].instance = instance;
+  d->mod[d->count].params = params;
+  d->count++;
+  return params;
+}
+
+static float *_lr_field(_lr_develop_t *d, const char *op, const char *field)
+{
+  void *params = _lr_params(d, op, NULL);
+  dt_iop_module_t *m = dt_iop_get_module_from_list(d->dev->iop, op);
+  return params && m && m->so->get_p ? m->so->get_p(params, field) : NULL;
+}
+
+static void _lr_set(_lr_develop_t *d, const char *op, const char *field, const float value)
+{
+  float *f = _lr_field(d, op, field);
+  if(f) *f = value;
+}
+
+static void _lr_add(_lr_develop_t *d, const char *op, const char *field, const float value)
+{
+  float *f = _lr_field(d, op, field);
+  if(f) *f += value;
+}
+
+static gboolean _lightspeed_develop(dt_develop_t *dev,
+                                    const dt_imgid_t imgid,
+                                    GHashTable *crs,
+                                    char *imported,
+                                    const size_t imported_len,
+                                    int *n_import)
+{
+  if(!dev || !crs || !dev->iop) return FALSE;
+
+  _lr_develop_t d = { .dev = dev, .crs = crs, .count = 0 };
+  const gboolean is_raw = dt_image_is_raw(&dev->image_storage);
+  float v = 0.0f;
+
+  // basic panel: tone & presence
+  static const struct { dt_lsb_id_t id; const char *key; const char *old_key; } basic[] =
+  {
+    { DT_LSB_EXPOSURE,   "Exposure2012",   "Exposure" },
+    { DT_LSB_CONTRAST,   "Contrast2012",   NULL },
+    { DT_LSB_HIGHLIGHTS, "Highlights2012", NULL },
+    { DT_LSB_SHADOWS,    "Shadows2012",    NULL },
+    { DT_LSB_WHITES,     "Whites2012",     NULL },
+    { DT_LSB_BLACKS,     "Blacks2012",     NULL },
+    { DT_LSB_TEXTURE,    "Texture",        NULL },
+    { DT_LSB_CLARITY,    "Clarity2012",    "Clarity" },
+    { DT_LSB_DEHAZE,     "Dehaze",         NULL },
+    { DT_LSB_VIBRANCE,   "Vibrance",       NULL },
+    { DT_LSB_SATURATION, "Saturation",     NULL },
+  };
+
+  for(int k = 0; k < G_N_ELEMENTS(basic); k++)
+  {
+    if(!_crs_float(&d, basic[k].key, &v)
+       && !(basic[k].old_key && _crs_float(&d, basic[k].old_key, &v)))
+      continue;
+    if(v == 0.0f) continue;
+
+    const dt_lsb_control_t *c = dt_lsb_control(basic[k].id);
+    void *params = _lr_params(&d, c->op, c->instance);
+    dt_iop_module_t *m = dt_iop_get_module_from_list(dev->iop, c->op);
+    if(params && m) dt_lsb_write_params(m, c, params, v);
+  }
+
+  // white balance and treatment through color calibration
+  const char *wb = _crs(&d, "WhiteBalance");
+  float temp = 0.0f, tint = 0.0f;
+  if(wb && g_strcmp0(wb, "As Shot"))
+  {
+    gboolean has_wb = FALSE;
+    if(is_raw && _crs_float(&d, "Temperature", &temp))
+    {
+      if(!_crs_float(&d, "Tint", &tint)) tint = 0.0f;
+      has_wb = TRUE;
+    }
+    else if(!is_raw && _crs_float(&d, "IncrementalTemperature", &temp))
+    {
+      // relative change on already white balanced images
+      temp = 5003.0f * exp2f(temp / 100.0f);
+      if(!_crs_float(&d, "IncrementalTint", &tint)) tint = 0.0f;
+      has_wb = TRUE;
+    }
+    if(has_wb)
+    {
+      void *params = _lr_params(&d, "channelmixerrgb", NULL);
+      dt_iop_module_t *m = dt_iop_get_module_from_list(dev->iop, "channelmixerrgb");
+      if(params && m) dt_lsb_wb_write_params(m, params, temp, tint);
+    }
+  }
+
+  if(_crs_bool(&d, "ConvertToGrayscale"))
+  {
+    float *grey = _lr_field(&d, "channelmixerrgb", "grey");
+    dt_iop_module_t *m = dt_iop_get_module_from_list(dev->iop, "channelmixerrgb");
+    void *params = _lr_params(&d, "channelmixerrgb", NULL);
+    gboolean *norm = params && m ? m->so->get_p(params, "normalize_grey") : NULL;
+    if(grey)
+    {
+      grey[0] = 0.0f;
+      grey[1] = 1.0f;
+      grey[2] = 0.0f;
+    }
+    if(norm) *norm = TRUE;
+  }
+
+  // HSL -> color equalizer
+  static const char *lr_colors[8] =
+    { "Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta" };
+  static const char *dt_colors[8] =
+    { "red", "orange", "yellow", "green", "cyan", "blue", "lavender", "magenta" };
+  for(int k = 0; k < 8; k++)
+  {
+    char key[64], field[64];
+    snprintf(key, sizeof(key), "HueAdjustment%s", lr_colors[k]);
+    if(_crs_float(&d, key, &v) && v != 0.0f)
+    {
+      snprintf(field, sizeof(field), "hue_%s", dt_colors[k]);
+      _lr_set(&d, "colorequal", field, CLAMP(v * 0.3f, -180.0f, 180.0f));
+    }
+    snprintf(key, sizeof(key), "SaturationAdjustment%s", lr_colors[k]);
+    if(_crs_float(&d, key, &v) && v != 0.0f)
+    {
+      snprintf(field, sizeof(field), "sat_%s", dt_colors[k]);
+      _lr_set(&d, "colorequal", field, CLAMP(1.0f + v / 100.0f, 0.0f, 2.0f));
+    }
+    snprintf(key, sizeof(key), "LuminanceAdjustment%s", lr_colors[k]);
+    if(_crs_float(&d, key, &v) && v != 0.0f)
+    {
+      snprintf(field, sizeof(field), "bright_%s", dt_colors[k]);
+      _lr_set(&d, "colorequal", field, CLAMP(1.0f + v * 0.004f, 0.0f, 2.0f));
+    }
+  }
+
+  // split toning / color grading -> color balance rgb 4 ways
+  static const struct { const char *hue, *sat, *lum; const char *H, *C, *Y; } grading[] =
+  {
+    { "SplitToningShadowHue",    "SplitToningShadowSaturation",    "ColorGradeShadowLum",
+      "shadows_H", "shadows_C", "shadows_Y" },
+    { "SplitToningHighlightHue", "SplitToningHighlightSaturation", "ColorGradeHighlightLum",
+      "highlights_H", "highlights_C", "highlights_Y" },
+    { "ColorGradeMidtoneHue",    "ColorGradeMidtoneSat",           "ColorGradeMidtoneLum",
+      "midtones_H", "midtones_C", "midtones_Y" },
+    { "ColorGradeGlobalHue",     "ColorGradeGlobalSat",            "ColorGradeGlobalLum",
+      "global_H", "global_C", "global_Y" },
+  };
+  for(int k = 0; k < G_N_ELEMENTS(grading); k++)
+  {
+    float hue = 0.0f, sat = 0.0f, lum = 0.0f;
+    if(_crs_float(&d, grading[k].sat, &sat) && sat > 0.0f)
+    {
+      _crs_float(&d, grading[k].hue, &hue);
+      _lr_set(&d, "colorbalancergb", grading[k].H, fmodf(hue + 360.0f, 360.0f));
+      _lr_set(&d, "colorbalancergb", grading[k].C, CLAMP(sat / 100.0f * 0.3f, 0.0f, 1.0f));
+    }
+    if(_crs_float(&d, grading[k].lum, &lum) && lum != 0.0f)
+      _lr_add(&d, "colorbalancergb", grading[k].Y, lum / 100.0f * (k == 3 ? 0.02f : 0.25f));
+  }
+
+  // detail: sharpening and noise reduction
+  float radius = 1.0f;
+  _crs_float(&d, "SharpenRadius", &radius);
+  // Lightroom's default sharpening (40, radius 1.0) is left to darktable
+  if(_crs_float(&d, "Sharpness", &v) && v > 0.0f && (v != 40.0f || radius != 1.0f))
+  {
+    _lr_set(&d, "sharpen", "amount", CLAMP(v / 40.0f * 0.5f, 0.0f, 2.0f));
+    _lr_set(&d, "sharpen", "radius", CLAMP(radius * 2.0f, 0.5f, 8.0f));
+  }
+  if(_crs_float(&d, "LuminanceSmoothing", &v) && v > 0.0f)
+    _lr_set(&d, "denoiseprofile", "strength", CLAMP(v / 50.0f, 0.1f, 4.0f));
+
+  // lens corrections
+  if(_crs_bool(&d, "LensProfileEnable"))
+    _lr_params(&d, "lens", NULL);
+  if(_crs_bool(&d, "AutoLateralCA"))
+    _lr_params(&d, "cacorrectrgb", NULL);
+
+  // write the history items
+  const gboolean any = d.count > 0;
+  for(int k = 0; k < d.count; k++)
+  {
+    _lr_module_params_t *mp = &d.mod[k];
+    int multi_priority = 0;
+    if(mp->instance)
+    {
+      // dedicated instance, after the existing ones
+      sqlite3_stmt *stmt;
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT IFNULL(MAX(multi_priority), 0) + 1 FROM main.history"
+                                  " WHERE imgid = ?1 AND operation = ?2",
+                                  -1, &stmt, NULL);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, mp->module->op, -1, SQLITE_TRANSIENT);
+      if(sqlite3_step(stmt) == SQLITE_ROW) multi_priority = sqlite3_column_int(stmt, 0);
+      sqlite3_finalize(stmt);
+      _ensure_iop_order_instance(imgid, mp->module->op, multi_priority);
+    }
+    dt_print(DT_DEBUG_PARAMS, "[lightroom] image %d: %s instance '%s' priority %d",
+             imgid, mp->module->op, mp->instance ? mp->instance : "", multi_priority);
+    _add_hist_module(imgid, mp->module, mp->params, multi_priority, mp->instance,
+                     imported, imported_len, n_import);
+    g_free(mp->params);
+  }
+
+  return any;
+}
+
+static gboolean _lightroom_import_doc(const dt_imgid_t imgid,
+                                      dt_develop_t *dev,
+                                      xmlDocPtr doc,
+                                      const dt_lightroom_import_flags_t flags,
+                                      const gboolean iauto,
+                                      const char *pathname)
 {
   gboolean refresh_needed = FALSE;
   char imported[256] = { 0 };
   int n_import = 0;                // number of iop imported
   gboolean is_lr = FALSE;
 
-  // Get full pathname
-  char *pathname = dt_get_lightroom_xmp(imgid);
-
-  if(!pathname)
-  {
-    if(!iauto) dt_control_log(_("cannot find Lightroom XMP!"));
-    return FALSE;
-  }
-
-  // Load LR xmp
-
-  xmlDocPtr doc;
   xmlNodePtr entryNode;
-
-  // Parse xml document
-
-  doc = xmlReadFile(pathname, NULL, 0);
-
-  if(doc == NULL)
-  {
-    g_free(pathname);
-    return FALSE ;
-  }
 
   // Enter first node, xmpmeta
 
@@ -1159,7 +1560,6 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
 
   if(entryNode == NULL)
   {
-    g_free(pathname);
     xmlFreeDoc(doc);
     return FALSE;
   }
@@ -1167,7 +1567,7 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
   if(xmlStrcmp(entryNode->name, (const xmlChar *)"xmpmeta"))
   {
     if(!iauto) dt_control_log(_("`%s' is not a Lightroom XMP!"), pathname);
-    g_free(pathname);
+    xmlFreeDoc(doc);
     return FALSE;
   }
 
@@ -1177,7 +1577,6 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
 
   if(xpathCtx == NULL)
   {
-    g_free(pathname);
     xmlFreeDoc(doc);
     return FALSE;
   }
@@ -1190,7 +1589,6 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
   {
     if(!iauto) dt_control_log(_("`%s' is not a Lightroom XMP!"), pathname);
     xmlXPathFreeContext(xpathCtx);
-    g_free(pathname);
     xmlFreeDoc(doc);
     return FALSE;
   }
@@ -1202,15 +1600,17 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
     xmlNodePtr xnode = xnodes->nodeTab[0];
     xmlChar *value = xmlNodeListGetString(doc, xnode->xmlChildrenNode, 1);
 
-    if(!strstr((char *)value, "Lightroom") && !strstr((char *)value, "Camera Raw"))
+    // settings coming from a catalog are known to be Lightroom's even if
+    // the image went through Photoshop
+    if(!(flags & DT_LR_IMPORT_FROM_CATALOG)
+       && !strstr((char *)value, "Lightroom") && !strstr((char *)value, "Camera Raw"))
     {
       xmlXPathFreeContext(xpathCtx);
       xmlXPathFreeObject(xpathObj);
       xmlFreeDoc(doc);
       xmlFree(value);
       if(!iauto) dt_control_log(_("`%s' is not a Lightroom XMP!"), pathname);
-      g_free(pathname);
-      return FALSE;
+        return FALSE;
     }
     is_lr = TRUE;
     xmlFree(value);
@@ -1222,8 +1622,7 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
 //     xmlXPathFreeObject(xpathObj);
 //     xmlXPathFreeContext(xpathCtx);
 //     if(!iauto) dt_control_log(_("`%s' is not a Lightroom XMP!"), pathname);
-//     g_free(pathname);
-//     return;
+// //     return;
 //   }
 
   // let's now parse the needed data
@@ -1258,6 +1657,8 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
   data.iwidth = 0;
   data.iheight = 0;                 // image width / height
   data.orientation = EXIF_ORIENTATION_NONE;
+  data.flags = flags;
+  data.crs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
   // record the name-spaces needed for the parsing
   xmlXPathRegisterNs
@@ -1396,13 +1797,6 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
     refresh_needed = TRUE;
   }
 
-  if(dev != NULL && data.has_exposure)
-  {
-    dt_add_hist(imgid, "exposure", (dt_iop_params_t *)&data.pe, sizeof(dt_iop_exposure_params_t), imported,
-                sizeof(imported), LRDT_EXPOSURE_VERSION, &n_import);
-    refresh_needed = TRUE;
-  }
-
   if(dev != NULL && data.has_grain)
   {
     data.pg.channel = 0;
@@ -1535,37 +1929,10 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
     refresh_needed = TRUE;
   }
 
-  if(dev != NULL && data.has_colorzones)
-  {
-    data.pcz.channel = DT_IOP_COLORZONES_h;
-
-    for(int i = 0; i < 3; i++)
-      for(int k = 0; k < 8; k++)
-        data.pcz.equalizer_x[i][k] = k / (DT_IOP_COLORZONES_BANDS - 1.0);
-
-    dt_add_hist(imgid, "colorzones", (dt_iop_params_t *)&data.pcz, sizeof(dt_iop_colorzones_params_t), imported,
-                sizeof(imported), LRDT_COLORZONES_VERSION, &n_import);
+  if(dev != NULL
+     && _lightspeed_develop(dev, imgid, data.crs, imported, sizeof(imported), &n_import))
     refresh_needed = TRUE;
-  }
-
-  if(dev != NULL && data.has_splittoning)
-  {
-    data.pst.compress = 50.0;
-
-    dt_add_hist(imgid, "splittoning", (dt_iop_params_t *)&data.pst, sizeof(dt_iop_splittoning_params_t), imported,
-                sizeof(imported), LRDT_SPLITTONING_VERSION, &n_import);
-    refresh_needed = TRUE;
-  }
-
-  if(dev != NULL && data.has_bilat)
-  {
-    data.pbl.sigma_r = 100.0;
-    data.pbl.sigma_s = 100.0;
-
-    dt_add_hist(imgid, "bilat", (dt_iop_params_t *)&data.pbl, sizeof(dt_iop_bilat_params_t), imported,
-                sizeof(imported), LRDT_BILAT_VERSION, &n_import);
-    refresh_needed = TRUE;
-  }
+  g_hash_table_destroy(data.crs);
 
   if(data.has_tags)
   {
@@ -1574,7 +1941,7 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
     n_import++;
   }
 
-  if(dev == NULL && data.has_rating)
+  if((data.flags & DT_LR_IMPORT_RATING) && data.has_rating)
   {
     dt_ratings_apply_on_image(imgid, data.rating, FALSE, FALSE, FALSE);
 
@@ -1583,7 +1950,7 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
     n_import++;
   }
 
-  if(dev == NULL && data.has_gps)
+  if((data.flags & DT_LR_IMPORT_GEOTAG) && data.has_gps)
   {
     dt_image_geoloc_t geoloc;
     geoloc.longitude = data.lon;
@@ -1599,7 +1966,7 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
     n_import++;
   }
 
-  if(dev == NULL && data.has_colorlabel)
+  if((data.flags & DT_LR_IMPORT_LABEL) && data.has_colorlabel)
   {
     dt_colorlabels_set_label(imgid, data.color);
 
@@ -1624,6 +1991,40 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
   }
   return TRUE;
 }
+gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto)
+{
+  // Get full pathname
+  char *pathname = dt_get_lightroom_xmp(imgid);
+
+  if(!pathname)
+  {
+    if(!iauto) dt_control_log(_("cannot find Lightroom XMP!"));
+    return FALSE;
+  }
+
+  xmlDocPtr doc = xmlReadFile(pathname, NULL, 0);
+  gboolean res = FALSE;
+  if(doc)
+    res = _lightroom_import_doc(imgid, dev, doc,
+                                dev ? DT_LR_IMPORT_DEVELOP : DT_LR_IMPORT_ALL_META,
+                                iauto, pathname);
+  g_free(pathname);
+  return res;
+}
+
+gboolean dt_lightroom_import_xmp_buffer(const dt_imgid_t imgid,
+                                        dt_develop_t *dev,
+                                        const char *buffer,
+                                        const size_t size,
+                                        const dt_lightroom_import_flags_t flags)
+{
+  if(!buffer || !size) return FALSE;
+  xmlDocPtr doc = xmlReadMemory(buffer, (int)size, "lightroom.xmp", NULL, XML_PARSE_NONET);
+  if(!doc) return FALSE;
+  return _lightroom_import_doc(imgid, (flags & DT_LR_IMPORT_DEVELOP) ? dev : NULL,
+                               doc, flags, TRUE, _("Lightroom catalog"));
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

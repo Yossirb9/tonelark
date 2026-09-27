@@ -1332,7 +1332,9 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   GtkWidget *label = gtk_label_new("");
   GtkWidget *label_evb = gtk_event_box_new();
   gtk_container_add(GTK_CONTAINER(label_evb), label);
-  gchar *mname = g_markup_escape_text(module->name(module), -1);
+  gchar *title = dt_ui_panel_title(module->name(module));
+  gchar *mname = g_markup_escape_text(title, -1);
+  g_free(title);
   gtk_label_set_markup(GTK_LABEL(label), mname);
   if(module->description)
     gtk_widget_set_tooltip_text(header, module->description(module));

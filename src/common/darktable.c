@@ -45,6 +45,7 @@
 #include "common/image_cache.h"
 #include "common/iop_order.h"
 #include "common/l10n.h"
+#include "common/lightroom_catalog.h"
 #include "common/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
@@ -955,6 +956,27 @@ char *version = g_strdup_printf(
   return version;
 }
 
+static gboolean _import_lightroom_catalog(gpointer data)
+{
+  gchar *filename = data;
+  GError *error = NULL;
+  dt_lrcat_t *cat = dt_lrcat_open(filename, &error);
+  if(cat)
+  {
+    const dt_lrcat_options_t options = { .develop = TRUE, .metadata = TRUE,
+                                         .keywords = TRUE, .collections = TRUE,
+                                         .stacks = TRUE };
+    dt_lrcat_import(cat, &options, FALSE);
+  }
+  else
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[lightroom] %s", error ? error->message : filename);
+    g_clear_error(&error);
+  }
+  g_free(filename);
+  return G_SOURCE_REMOVE;
+}
+
 int dt_init(int argc,
             char *argv[],
             const gboolean init_gui,
@@ -1031,6 +1053,7 @@ int dt_init(int argc,
 
 #ifdef USE_LUA
   char *lua_command = NULL;
+  const char *lightroom_catalog = NULL;
 #endif
 
   darktable.num_openmp_threads = dt_get_num_procs();
@@ -1315,6 +1338,13 @@ int dt_init(int argc,
       else if(!strcmp(argv[k], "--noiseprofiles") && argc > k + 1)
       {
         noiseprofiles_from_command = argv[++k];
+        argv[k-1] = NULL;
+        argv[k] = NULL;
+      }
+      else if(!strcmp(argv[k], "--import-lightroom") && argc > k + 1)
+      {
+        // Lightspeed: import a Lightroom catalog after startup
+        lightroom_catalog = argv[++k];
         argv[k-1] = NULL;
         argv[k] = NULL;
       }
@@ -1881,6 +1911,11 @@ int dt_init(int argc,
   dt_set_signal_handlers();
 #else
   InitializeMagickEx(darktable.progname, MAGICK_OPT_NO_SIGNAL_HANDER, NULL);
+#ifdef _WIN32
+  // GraphicsMagick still installs its own unhandled exception filter on
+  // Windows, restore ours so that crashes produce a backtrace
+  dt_set_signal_handlers();
+#endif
 #endif
 #elif defined HAVE_IMAGEMAGICK
   /* ImageMagick init */
@@ -2045,6 +2080,10 @@ int dt_init(int argc,
     // connect the shortcut dispatcher
     g_signal_connect(dt_ui_main_window(darktable.gui->ui), "event",
                      G_CALLBACK(dt_shortcut_dispatcher), NULL);
+
+    // import once the user interface is running
+    if(lightroom_catalog)
+      g_timeout_add(1000, _import_lightroom_catalog, g_strdup(lightroom_catalog));
 
     // load image(s) specified on cmdline.  this has to happen after
     // lua is initialized as image import can run lua code

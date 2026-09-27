@@ -3207,7 +3207,9 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
 
   /* add module label & instance name */
   GtkWidget *lab = gtk_event_box_new();
-  module->label = gtk_label_new(module->name());
+  gchar *title = dt_ui_panel_title(module->name());
+  module->label = gtk_label_new(title);
+  g_free(title);
   gtk_widget_set_name(module->label, "iop-panel-label");
   gtk_label_set_ellipsize(GTK_LABEL(module->label), PANGO_ELLIPSIZE_END);
   gtk_widget_set_valign(module->label, GTK_ALIGN_BASELINE);

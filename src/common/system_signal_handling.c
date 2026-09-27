@@ -161,7 +161,11 @@ static LONG WINAPI dt_toplevel_exception_handler(PEXCEPTION_POINTERS pExceptionI
        "please share this backtrace with the developers.\n",
        name_used);
     wchar_t *wexception_message = g_utf8_to_utf16(exception_message, -1, NULL, NULL, NULL);
-    MessageBoxW(0, wexception_message, L"Error!", MB_OK);
+    // unattended runs (tests) write the backtrace without asking
+    if(!g_getenv("LIGHTSPEED_NO_CRASH_DIALOG"))
+      MessageBoxW(0, wexception_message, L"Error!", MB_OK);
+    else
+      g_printerr("%s", exception_message);
     g_free(exception_message);
     g_free(wexception_message);
   }

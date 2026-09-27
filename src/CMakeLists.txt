@@ -62,6 +62,7 @@ FILE(GLOB SOURCE_FILES
   "common/image_cache.c"
   "common/imagebuf.c"
   "common/import_session.c"
+  "common/lightroom_catalog.c"
   "common/interpolation.c"
   "common/iop_group.c"
   "common/iop_order.c"
