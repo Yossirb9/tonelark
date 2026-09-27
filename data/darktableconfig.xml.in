@@ -316,6 +316,13 @@
     <longdescription>defines priorities on how (multiple) OpenCL devices are allocated to the different types of pixelpipe (full, preview, export, thumbnail, preview2). for more details visit our user manual. (restart required)</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>opencl_guided_filter</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>run the guided filter on the GPU</shortdescription>
+    <longdescription>the OpenCL guided filter (haze removal, feathered masks) gives wrong values near the bottom border on some drivers, by default it runs on the CPU</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>opencl_mandatory_timeout</name>
     <type min="100">int</type>
     <default>1000</default>

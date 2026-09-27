@@ -30,6 +30,7 @@
 
 #include "common/box_filters.h"
 #include "common/guided_filter.h"
+#include "control/conf.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include <assert.h>
@@ -709,7 +710,14 @@ int guided_filter_cl(int devid,
   assert(ch >= 3);
   assert(w >= 1);
 
-  cl_int err = _guided_filter_cl_impl(devid, guide, in, out, width, height, w, sqrt_eps, guide_weight, min, max);
+  // Lightspeed: the OpenCL implementation gives wrong values in the last
+  // 2*w+1 rows on some drivers (Intel Xe: transmission of haze removal out of
+  // range, garbage at the bottom of downscaled exports), the CPU code is
+  // correct. The data is copied to the host and back, well under a second.
+  // opencl_guided_filter=TRUE in darktablerc goes back to the GPU code.
+  cl_int err = DT_OPENCL_PROCESS_CL;
+  if(dt_conf_get_bool("opencl_guided_filter"))
+    err = _guided_filter_cl_impl(devid, guide, in, out, width, height, w, sqrt_eps, guide_weight, min, max);
 
   if(err != CL_SUCCESS)
     err = _guided_filter_cl_fallback(devid, guide, in, out, width, height, ch, w, sqrt_eps, guide_weight, min, max);
