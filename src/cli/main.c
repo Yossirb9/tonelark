@@ -36,7 +36,9 @@
 #include "common/image_cache.h"
 #include "common/points.h"
 #include "control/conf.h"
+#include "develop/develop.h"
 #include "develop/imageop.h"
+#include "develop/lightroom.h"
 #include "imageio/imageio_common.h"
 #include "imageio/imageio_jpeg.h"
 #include "imageio/imageio_module.h"
@@ -683,6 +685,28 @@ int main(int argc, char *arg[])
       // don't write new xmp:
       dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
     }
+
+    // Lightspeed: a Lightroom XMP (Camera Raw settings, no darktable
+    // history) develops the images like the Lightroom catalog import
+    gchar *xmp = NULL;
+    gsize xmp_len = 0;
+    if(g_file_get_contents(xmp_filename, &xmp, &xmp_len, NULL)
+       && strstr(xmp, "ns.adobe.com/camera-raw-settings")
+       && !strstr(xmp, "darktable:history"))
+    {
+      for(GList *iter = id_list; iter; iter = g_list_next(iter))
+      {
+        const dt_imgid_t id = GPOINTER_TO_INT(iter->data);
+        dt_develop_t dev;
+        dt_dev_init(&dev, FALSE);
+        dt_dev_load_image(&dev, id);
+        dt_lightroom_import_xmp_buffer(id, &dev, xmp, xmp_len,
+                                       DT_LR_IMPORT_DEVELOP | DT_LR_IMPORT_FROM_CATALOG);
+        dt_dev_cleanup(&dev);
+        dt_history_hash_write_from_history(id, DT_HISTORY_HASH_CURRENT);
+      }
+    }
+    g_free(xmp);
   }
 
   // print the history stack. only look at the first image and assume all got the same processing applied
@@ -728,6 +752,26 @@ int main(int argc, char *arg[])
     {
       *ext = '\0';
     }
+  }
+
+  // Lightspeed: an .xmp output writes the development of the first image as a
+  // darktable sidecar, e.g. to convert Lightroom settings
+  if(!g_ascii_strcasecmp(output_ext, "xmp"))
+  {
+    const dt_imgid_t id = GPOINTER_TO_INT(id_list->data);
+    gchar *xmp_out = g_strdup_printf("%s.xmp", output_filename);
+    const gboolean failed = dt_exif_xmp_write(id, xmp_out, TRUE);
+    if(failed)
+      fprintf(stderr, _("error: can't write XMP file %s\n"), xmp_out);
+    else
+      printf(_("darktable XMP written to %s\n"), xmp_out);
+    g_free(xmp_out);
+    g_free(output_filename);
+    g_free(output_ext);
+    g_list_free(id_list);
+    dt_cleanup();
+    free(m_arg);
+    exit(failed ? 1 : 0);
   }
 
   if(!strcmp(output_ext, "jpg"))

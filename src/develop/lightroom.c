@@ -1356,6 +1356,27 @@ static void _lr_add(_lr_develop_t *d, const char *op, const char *field, const f
   if(f) *f += value;
 }
 
+// Lightroom's color grading hue (HSL hue: 0 red, 60 yellow, 240 blue) to the
+// hue of color balance rgb. Measured every 10 degrees: the color balance rgb
+// hue that gives the same CIE Lab hue shift as the Lightroom hue.
+static const float _lr_grading_hue[36] =
+{
+  29.3f, 34.1f, 46.0f, 57.9f, 64.4f, 69.6f, 73.6f, 76.8f, 79.6f,
+  84.0f, 87.4f, 89.3f, 89.9f, 92.5f, 99.2f, 118.4f, 148.1f, 157.8f,
+  165.7f, 181.7f, 237.6f, 262.7f, 277.1f, 287.2f, 291.0f, 292.0f, 294.6f,
+  299.3f, 307.0f, 315.3f, 322.6f, 329.7f, 335.2f, 342.1f, 349.7f, 13.4f
+};
+
+static float _lr_hue_to_dt(const float lr_hue)
+{
+  const float h = fmodf(fmodf(lr_hue, 360.0f) + 360.0f, 360.0f) / 10.0f;
+  const int i = MIN((int)h, 35);
+  const float a = _lr_grading_hue[i];
+  float b = _lr_grading_hue[(i + 1) % 36];
+  if(b < a) b += 360.0f;
+  return fmodf(a + (h - i) * (b - a), 360.0f);
+}
+
 static gboolean _lightspeed_develop(dt_develop_t *dev,
                                     const dt_imgid_t imgid,
                                     GHashTable *crs,
@@ -1401,6 +1422,13 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
   // white balance and treatment through color calibration
   const char *wb = _crs(&d, "WhiteBalance");
   float temp = 0.0f, tint = 0.0f;
+  {
+    dt_iop_module_t *cm = dt_iop_get_module_from_list(dev->iop, "channelmixerrgb");
+    float t0 = 0.0f, t1 = 0.0f;
+    if(cm && dt_lsb_wb_read(cm, &t0, &t1))
+      dt_print(DT_DEBUG_PARAMS, "[lightroom] image %d: as shot white balance %.0fK tint %+.0f",
+               imgid, t0, t1);
+  }
   if(wb && g_strcmp0(wb, "As Shot"))
   {
     gboolean has_wb = FALSE;
@@ -1485,7 +1513,7 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
     if(_crs_float(&d, grading[k].sat, &sat) && sat > 0.0f)
     {
       _crs_float(&d, grading[k].hue, &hue);
-      _lr_set(&d, "colorbalancergb", grading[k].H, fmodf(hue + 360.0f, 360.0f));
+      _lr_set(&d, "colorbalancergb", grading[k].H, _lr_hue_to_dt(hue));
       _lr_set(&d, "colorbalancergb", grading[k].C, CLAMP(sat / 100.0f * 0.3f, 0.0f, 1.0f));
     }
     if(_crs_float(&d, grading[k].lum, &lum) && lum != 0.0f)
