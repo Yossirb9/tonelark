@@ -3881,25 +3881,64 @@ dt_hash_t dt_dev_hash_distort_plus(dt_develop_t *dev,
   return hash;
 }
 
+// display rank of the modules when they are grouped like the Lightroom
+// develop panels: tone curve, HSL, color grading, detail, lens corrections,
+// transform, effects, calibration. other modules follow in pipe order.
+static int _lightroom_panel_rank(const dt_iop_module_t *module)
+{
+  static const char *order[] =
+    { "rgbcurve", "tonecurve", "rgblevels", "levels",
+      "colorequal", "colorzones",
+      "colorbalancergb", "splittoning",
+      "sharpen", "diffuse", "denoiseprofile", "nlmeans", "bilateral", "rawdenoise",
+      "lens", "cacorrect", "cacorrectrgb", "defringe",
+      "ashift", "crop", "clipping", "flip", "liquify",
+      "vignette", "grain", "bloom", "soften", "hazeremoval",
+      "channelmixerrgb", "colorin",
+      "retouch", "spots",
+      NULL };
+
+  for(int i = 0; order[i]; i++)
+    if(dt_iop_module_is(module, order[i])) return i;
+  return G_MAXINT;
+}
+
+static gint _lightroom_panel_cmp(gconstpointer a, gconstpointer b)
+{
+  const int ra = _lightroom_panel_rank(a);
+  const int rb = _lightroom_panel_rank(b);
+  return ra < rb ? -1 : ra > rb ? 1 : 0;
+}
+
 // set the module list order
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
 {
+  GtkBox *box = dt_ui_get_container(darktable.gui->ui,
+                                    DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
   int pos_module = 0;
-  for(const GList *modules = g_list_last(dev->iop);
-      modules;
-      modules = g_list_previous(modules))
+
+  // panels pinned on top of the modules (Lightroom-style basic panel)
+  GList *children = gtk_container_get_children(GTK_CONTAINER(box));
+  for(const GList *c = children; c; c = g_list_next(c))
+    if(g_object_get_data(G_OBJECT(c->data), "dt-pin-top"))
+      gtk_box_reorder_child(box, GTK_WIDGET(c->data), pos_module++);
+  g_list_free(children);
+
+  // modules are shown in reverse pipe order, g_list_sort() is stable so
+  // modules within the same Lightroom panel keep that order
+  GList *modules = g_list_reverse(g_list_copy(dev->iop));
+  if(dt_conf_get_bool("lightspeed/lightroom_panel_order"))
+    modules = g_list_sort(modules, _lightroom_panel_cmp);
+
+  for(const GList *m = modules; m; m = g_list_next(m))
   {
-    dt_iop_module_t *module = modules->data;
+    dt_iop_module_t *module = m->data;
 
     GtkWidget *expander = module->expander;
     if(expander)
-    {
-      gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui,
-                                                DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
-                            expander,
-                            pos_module++);
-    }
+      gtk_box_reorder_child(box, expander, pos_module++);
   }
+  g_list_free(modules);
 }
 
 void dt_dev_undo_start_record(dt_develop_t *dev)

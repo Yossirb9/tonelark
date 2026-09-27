@@ -26,6 +26,7 @@
 #include "common/image_cache.h"
 #include "common/ratings.h"
 #include "common/selection.h"
+#include "common/tags.h"
 #include "common/undo.h"
 #include "control/control.h"
 #include "gui/accelerators.h"
@@ -3059,6 +3060,70 @@ static void _accel_duplicate(dt_action_t *action)
   DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_TAG_CHANGED);
 }
 
+// Lightroom-style pick flags. darktable has a reject flag but no pick
+// flag, picks are stored as the internal tag "darktable|pick".
+#define DT_PICK_TAG "darktable|pick"
+
+static void _flag_images(const int flag)
+{
+  GList *imgs = dt_act_on_get_images(FALSE, TRUE, FALSE);
+  if(!imgs) return;
+
+  guint tagid = 0;
+  dt_tag_new(DT_PICK_TAG, &tagid);
+
+  dt_undo_start_group(darktable.undo, DT_UNDO_TAGS);
+
+  // pick and reject are mutually exclusive, unflag clears both
+  GList *rejected = NULL;
+  for(const GList *l = imgs; l; l = g_list_next(l))
+    if(dt_ratings_get(GPOINTER_TO_INT(l->data)) == DT_VIEW_REJECT)
+      rejected = g_list_prepend(rejected, l->data);
+
+  if(flag < 0)
+  {
+    dt_tag_detach_images(tagid, imgs, TRUE);
+    if(g_list_length(rejected) != g_list_length(imgs))
+      dt_ratings_apply_on_list(imgs, DT_VIEW_REJECT, TRUE);
+  }
+  else
+  {
+    if(flag > 0)
+      dt_tag_attach_images(tagid, imgs, TRUE);
+    else
+      dt_tag_detach_images(tagid, imgs, TRUE);
+    if(rejected)
+      dt_ratings_apply_on_list(rejected, DT_VIEW_REJECT, TRUE);
+  }
+  dt_undo_end_group(darktable.undo);
+
+  dt_image_synch_xmps(imgs);
+  dt_toast_log(flag > 0 ? _("flagged as pick")
+               : flag < 0 ? _("flagged as rejected")
+               : _("flag removed"));
+
+  g_list_free(rejected);
+  g_list_free(imgs);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_TAG_CHANGED);
+  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD,
+                             DT_COLLECTION_PROP_TAG, NULL);
+}
+
+static void _accel_flag_pick(dt_action_t *action)
+{
+  _flag_images(1);
+}
+
+static void _accel_flag_reject(dt_action_t *action)
+{
+  _flag_images(-1);
+}
+
+static void _accel_unflag(dt_action_t *action)
+{
+  _flag_images(0);
+}
+
 static void _accel_select_all(dt_action_t *action)
 {
   dt_selection_select_all(darktable.selection);
@@ -3105,6 +3170,11 @@ static void _thumbtable_init_accels()
                      _accel_duplicate, GDK_KEY_d, GDK_CONTROL_MASK);
   dt_action_register(thumb_actions, N_("duplicate image virgin"),
                      _accel_duplicate, GDK_KEY_d, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+
+  /* Lightroom-style flags, keys are set by the Lightroom shortcuts */
+  dt_action_register(thumb_actions, N_("flag as pick"), _accel_flag_pick, 0, 0);
+  dt_action_register(thumb_actions, N_("flag as rejected"), _accel_flag_reject, 0, 0);
+  dt_action_register(thumb_actions, N_("unflag"), _accel_unflag, 0, 0);
 
   /* setup selection accelerators */
   dt_action_register(thumb_actions, N_("select all"),

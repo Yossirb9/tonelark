@@ -106,57 +106,45 @@ void gui_init(dt_lib_module_t *self)
   GtkListStore *model = NULL;
 
   const gboolean gimping =  dt_check_gimpmode("file");
+
+  // Lightroom-style module picker: every view is a label in one row,
+  // ordered like Library | Develop | Map | Slideshow | Print
+  static const char *order[] = { "lighttable", "darkroom", "map", "slideshow",
+                                 "print", "tethering", NULL };
+  GList *views = NULL;
+  for(int k = 0; order[k]; k++)
+    for(GList *view_iter = darktable.view_manager->views; view_iter; view_iter = g_list_next(view_iter))
+    {
+      dt_view_t *view = view_iter->data;
+      if(!g_strcmp0(view->module_name, order[k])) views = g_list_append(views, view);
+    }
   for(GList *view_iter = darktable.view_manager->views; view_iter; view_iter = g_list_next(view_iter))
+    if(!g_list_find(views, view_iter->data)) views = g_list_append(views, view_iter->data);
+
+  for(GList *view_iter = views; view_iter; view_iter = g_list_next(view_iter))
   {
     dt_view_t *view = view_iter->data;
-    // lighttable and darkroom are shown in the top level, the rest in a dropdown
-    /* create view label */
 
     // skip hidden views
     if(view->flags() & VIEW_FLAGS_HIDDEN) continue;
 
-    const gboolean lighttable = !g_strcmp0(view->module_name, "lighttable");
-    const gboolean darkroom = !g_strcmp0(view->module_name, "darkroom");
-    if(lighttable || darkroom)
+    if(d->labels)
     {
-      GtkWidget *w = _lib_viewswitcher_create_label(view);
-      gtk_box_pack_start(GTK_BOX(self->widget), w, FALSE, FALSE, 0);
-      d->labels = g_list_append(d->labels, gtk_bin_get_child(GTK_BIN(w)));
-
-      gtk_widget_set_sensitive(w, !(lighttable && gimping));
-      SHORTCUT_TOOLTIP(view, w);
-
-      /* create space if more views */
-      if(view_iter->next != NULL)
-      {
-        GtkWidget *sep = gtk_label_new("|");
-        gtk_widget_set_halign(sep, GTK_ALIGN_START);
-        gtk_widget_set_name(sep, "view-label");
-        gtk_box_pack_start(GTK_BOX(self->widget), sep, FALSE, FALSE, 0);
-      }
+      GtkWidget *sep = gtk_label_new("|");
+      gtk_widget_set_halign(sep, GTK_ALIGN_START);
+      gtk_widget_set_name(sep, "view-label");
+      gtk_box_pack_start(GTK_BOX(self->widget), sep, FALSE, FALSE, 0);
     }
-    else
-    {
-      // only create the dropdown when needed, in case someone runs dt with just lt + dr
-      if(!d->dropdown)
-      {
-        model = gtk_list_store_new(N_COLUMNS, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_BOOLEAN);
-        d->dropdown = gtk_combo_box_new_with_model(GTK_TREE_MODEL(model));
-        gtk_widget_set_name(d->dropdown, "view-dropdown");
-        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-        gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(d->dropdown), renderer, FALSE);
-        gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(d->dropdown), renderer, "markup", TEXT_COLUMN,
-                                        "sensitive", SENSITIVE_COLUMN, NULL);
 
-        gtk_list_store_insert_with_values(model, NULL, -1, TEXT_COLUMN, _("other"), VIEW_COLUMN, NULL, SENSITIVE_COLUMN, 0, -1);
+    GtkWidget *w = _lib_viewswitcher_create_label(view);
+    gtk_box_pack_start(GTK_BOX(self->widget), w, FALSE, FALSE, 0);
+    d->labels = g_list_append(d->labels, gtk_bin_get_child(GTK_BIN(w)));
 
-        gtk_box_pack_start(GTK_BOX(self->widget), d->dropdown, FALSE, FALSE, 0);
-        g_signal_connect(G_OBJECT(d->dropdown), "changed", G_CALLBACK(_dropdown_changed), d);
-      }
-
-      gtk_list_store_insert_with_values(model, NULL, -1, TEXT_COLUMN, view->name(view), VIEW_COLUMN, view, SENSITIVE_COLUMN, gimping ? 0 : 1, -1);
-    }
+    // only the lighttable is unavailable in GIMP mode
+    gtk_widget_set_sensitive(w, !(gimping && g_strcmp0(view->module_name, "darkroom")));
+    SHORTCUT_TOOLTIP(view, w);
   }
+  g_list_free(views);
 
   if(model) g_object_unref(model);
 
@@ -186,6 +174,7 @@ static void _lib_viewswitcher_view_cannot_change_callback(gpointer instance, dt_
                                                           dt_view_t *new_view, dt_lib_module_t *self)
 {
   dt_lib_viewswitcher_t *d = self->data;
+  if(!d->dropdown) return;
 
   g_signal_handlers_block_by_func(d->dropdown, _dropdown_changed, d);
   gtk_combo_box_set_active(GTK_COMBO_BOX(d->dropdown), 0);
@@ -213,6 +202,8 @@ static void _lib_viewswitcher_view_changed_callback(gpointer instance, dt_view_t
     else
       gtk_widget_set_state_flags(label, GTK_STATE_FLAG_NORMAL, TRUE);
   }
+
+  if(!d->dropdown) return;
 
   g_signal_handlers_block_by_func(d->dropdown, _dropdown_changed, d);
 

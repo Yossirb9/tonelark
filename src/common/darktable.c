@@ -2023,6 +2023,19 @@ int dt_init(int argc,
     // Save the default shortcuts
     dt_shortcuts_save(".defaults", FALSE);
 
+    // first run: start from the Lightroom-style keyboard shortcuts
+    gchar *user_shortcuts = g_build_filename(darktable.configdir, "shortcutsrc", NULL);
+    if(!g_file_test(user_shortcuts, G_FILE_TEST_EXISTS))
+    {
+      char lr_sharedir[PATH_MAX] = { 0 };
+      dt_loc_get_sharedir(lr_sharedir, sizeof(lr_sharedir));
+      // the '/' makes dt_shortcuts_load() treat it as a path, also on Windows
+      gchar *lr_shortcuts = g_strdup_printf("%s/darktable/shortcutsrc.lightroom", lr_sharedir);
+      dt_shortcuts_load(lr_shortcuts, FALSE);
+      g_free(lr_shortcuts);
+    }
+    g_free(user_shortcuts);
+
     // Then load any shortcuts if available (wipe defaults first if requested)
     dt_shortcuts_load(NULL, !dt_conf_get_bool("accel/load_defaults"));
 

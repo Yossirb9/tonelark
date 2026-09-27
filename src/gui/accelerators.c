@@ -3243,6 +3243,43 @@ static gboolean _find_combo_effect(const gchar **effects,
   return FALSE;
 }
 
+// Key events are matched on the key symbol of the first keyboard layout
+// (see _fix_keyval). A key named in a shortcuts file that the first layout
+// cannot produce (e.g. a latin letter when the first layout is hebrew) is
+// mapped to the physical key producing it in another layout.
+static guint _shortcut_file_keyval(const guint keyval, GdkModifierType *mods)
+{
+  GdkKeymap *keymap = gdk_keymap_get_for_display(gdk_display_get_default());
+  GdkKeymapKey *keys;
+  gint n_keys;
+
+  if(!keymap || !gdk_keymap_get_entries_for_keyval(keymap, keyval, &keys, &n_keys))
+    return keyval;
+
+  int best = 0;
+  for(int j = 0; j < n_keys; j++)
+  {
+    if(keys[j].group == 0 && keys[j].level == 0)
+    {
+      // already a symbol of the first layout
+      g_free(keys);
+      return keyval;
+    }
+    if(keys[j].group < keys[best].group
+       || (keys[j].group == keys[best].group && keys[j].level < keys[best].level))
+      best = j;
+  }
+
+  guint first_layout_keyval = 0;
+  gdk_keymap_translate_keyboard_state(keymap, keys[best].keycode, 0, 0,
+                                      &first_layout_keyval, NULL, NULL, NULL);
+  if(keys[best].level & 1) *mods |= GDK_SHIFT_MASK;
+  if(keys[best].level & 2) *mods |= GDK_MOD5_MASK;
+  g_free(keys);
+
+  return first_layout_keyval ? first_layout_keyval : keyval;
+}
+
 static void _shortcuts_load(const gchar *shortcuts_file,
                             dt_input_device_t file_dev,
                             const dt_input_device_t load_dev,
@@ -3292,6 +3329,8 @@ static void _shortcuts_load(const gchar *shortcuts_file,
               dt_print(DT_DEBUG_ALWAYS,
                        "[dt_shortcuts_load] unexpected modifiers found in %s",
                        token);
+            if(s.key)
+              s.key = _shortcut_file_keyval(s.key, &s.mods);
             if(!s.key && sscanf(token, "tablet button %u", &s.key))
               s.key_device = DT_SHORTCUT_DEVICE_TABLET;
             if(!s.key)

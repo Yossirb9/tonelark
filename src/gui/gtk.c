@@ -191,8 +191,8 @@ static void _fullscreen_key_accel_callback(dt_action_t *action)
   // workaround for GTK Quartz backend bug
   gtk_window_set_title(GTK_WINDOW(widget),
                        widget == dt_ui_main_window(darktable.gui->ui)
-                       ? "darktable"
-                       : _("darktable - darkroom preview"));
+                       ? "Lightspeed"
+                       : _("Lightspeed - develop preview"));
 #endif
 }
 
@@ -953,6 +953,30 @@ gboolean _valid_window_placement(const gint saved_x,
   return FALSE;
 }
 
+static gboolean _maximize_main_window(gpointer data)
+{
+  // on Windows a maximize request before the window is mapped is lost
+  GtkWindow *window = GTK_WINDOW(data);
+  if(gtk_widget_get_mapped(GTK_WIDGET(window)))
+  {
+#ifdef _WIN32
+    // the first maximize happens before the monitor geometry is known and
+    // can leave a too small window: restore and maximize again once mapped
+    GdkWindow *gdk_window = gtk_widget_get_window(GTK_WIDGET(window));
+    if(gdk_window)
+    {
+      HWND hwnd = (HWND)gdk_win32_window_get_handle(gdk_window);
+      ShowWindow(hwnd, SW_RESTORE);
+      ShowWindow(hwnd, SW_MAXIMIZE);
+    }
+#else
+    gtk_window_maximize(window);
+#endif
+    return G_SOURCE_REMOVE;
+  }
+  return G_SOURCE_CONTINUE;
+}
+
 int dt_gui_gtk_load_config()
 {
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
@@ -975,7 +999,10 @@ int dt_gui_gtk_load_config()
     gtk_window_unfullscreen(GTK_WINDOW(widget));
     const gboolean maximized = dt_conf_get_bool("ui_last/maximized");
     if(maximized)
+    {
       gtk_window_maximize(GTK_WINDOW(widget));
+      g_timeout_add(200, _maximize_main_window, widget);
+    }
     else
       gtk_window_unmaximize(GTK_WINDOW(widget));
   }
@@ -1940,7 +1967,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
     // titlebar which allows for hiding that titlebar in maximized
     // windows when using an extensions such as Unite
     GtkWidget *header_bar = gtk_header_bar_new();
-    gtk_header_bar_set_title(GTK_HEADER_BAR(header_bar), "darktable");
+    gtk_header_bar_set_title(GTK_HEADER_BAR(header_bar), "Lightspeed");
     gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header_bar), TRUE);
     gtk_window_set_titlebar(GTK_WINDOW(widget), header_bar);
     gtk_widget_show(header_bar);
@@ -1954,7 +1981,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   gtk_window_set_type_hint(GTK_WINDOW(widget), GDK_WINDOW_TYPE_HINT_NORMAL);
 
   gtk_window_set_icon_name(GTK_WINDOW(widget), "darktable");
-  gtk_window_set_title(GTK_WINDOW(widget), "darktable");
+  gtk_window_set_title(GTK_WINDOW(widget), "Lightspeed");
 
   g_signal_connect(G_OBJECT(widget), "delete_event",
                    G_CALLBACK(_gui_quit_callback), NULL);
@@ -3639,7 +3666,7 @@ void dt_gui_load_theme(const char *theme)
   g_snprintf(theme_css, sizeof(theme_css), "%s.css", theme);
 
   if(!dt_conf_key_exists("use_system_font"))
-    dt_conf_set_bool("use_system_font", TRUE);
+    dt_conf_set_bool("use_system_font", FALSE);
 
   //set font size
   if(dt_conf_get_bool("use_system_font"))
@@ -3673,8 +3700,8 @@ void dt_gui_load_theme(const char *theme)
       // fallback to default theme
       g_free(path);
       // NOTE: When changing the default theme, don't forget to change it here!
-      path = g_build_filename(datadir, "themes", "darktable-elegant-grey.css", NULL);
-      dt_conf_set_string("ui_last/theme", "darktable-elegant-grey");
+      path = g_build_filename(datadir, "themes", "lightspeed.css", NULL);
+      dt_conf_set_string("ui_last/theme", "lightspeed");
     }
     else
       dt_conf_set_string("ui_last/theme", theme);

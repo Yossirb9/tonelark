@@ -20,13 +20,13 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "CompanyName",      "The darktable team"
-      VALUE "FileDescription",  "darktable photo workflow software"
+      VALUE "CompanyName",      "Lightspeed (based on darktable)"
+      VALUE "FileDescription",  "Lightspeed photo workflow software"
       VALUE "FileVersion",      "${PROJECT_VERSION}"
       VALUE "InternalName",     "darktable"
       VALUE "LegalCopyright",   "Copyright \xa9 2009-" LAST_COMMIT_YEAR
       VALUE "OriginalFilename", "darktable.exe"
-      VALUE "ProductName",      "darktable"
+      VALUE "ProductName",      "Lightspeed"
       VALUE "ProductVersion",   "${PROJECT_VERSION}"
     END
   END

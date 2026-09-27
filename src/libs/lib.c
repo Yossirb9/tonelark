@@ -664,8 +664,11 @@ uint32_t dt_lib_get_container(dt_lib_module_t *module)
               ? DT_UI_CONTAINER_PANEL_RIGHT_CENTER
               : DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 
+  // the right panel of the darkroom belongs to the processing modules,
+  // except for the Lightroom-style basic panel which sits on top of them
   if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER
-     && dt_view_get_current() == DT_VIEW_DARKROOM)
+     && dt_view_get_current() == DT_VIEW_DARKROOM
+     && g_strcmp0(module->plugin_name, "basicpanel"))
     container = DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 
   return container;

@@ -101,7 +101,7 @@ static int32_t _capture_view_get_selected_imgid(const dt_view_t *view);
 
 const char *name(const dt_view_t *self)
 {
-  return _("tethering");
+  return _("Tethering");
 }
 
 uint32_t view(const dt_view_t *self)

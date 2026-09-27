@@ -391,7 +391,7 @@ static void _step_state(dt_slideshow_t *d,
 // callbacks for a view module:
 const char *name(const dt_view_t *self)
 {
-  return _("slideshow");
+  return _("Slideshow");
 }
 
 uint32_t view(const dt_view_t *self)

@@ -256,7 +256,8 @@ static gboolean _lib_darktable_draw_callback(GtkWidget *widget,
 
   /* print version & workspace */
   const char *wp = dt_conf_get_string("workspace/label");
-  char *txt = g_strdup_printf("%s%s%s",
+  char *txt = g_strdup_printf("%s · darktable %s%s%s",
+                              LIGHTSPEED_VERSION,
                               darktable_package_version,
                               *wp ? " - " : "",
                               *wp ? wp    : "");

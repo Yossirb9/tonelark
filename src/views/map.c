@@ -272,7 +272,7 @@ static void _view_map_remove_location(const dt_map_t *lib,
 
 const char *name(const dt_view_t *self)
 {
-  return _("map");
+  return _("Map");
 }
 
 uint32_t view(const dt_view_t *self)

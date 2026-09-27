@@ -653,6 +653,7 @@ static void _gui_movedown_callback(GtkButton *button, dt_iop_module_t *module)
                         module->expander, g_value_get_int(&gv));
 
   dt_dev_add_history_item(prev->dev, module, TRUE);
+  dt_dev_reorder_gui_module_list(module->dev);
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_movedown_callback end");
 
@@ -689,6 +690,7 @@ static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
                         module->expander, g_value_get_int(&gv));
 
   dt_dev_add_history_item(next->dev, module, TRUE);
+  dt_dev_reorder_gui_module_list(module->dev);
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_moveup_callback end");
 
@@ -3125,6 +3127,7 @@ static gboolean _on_drag_motion(GtkWidget *widget,
     gtk_box_reorder_child(panel, src->expander, position);
 
     dt_dev_add_history_item(src->dev, src, TRUE);
+    dt_dev_reorder_gui_module_list(src->dev);
 
     dt_ioppr_check_iop_order(src->dev, 0, "_on_drag_drop end");
 

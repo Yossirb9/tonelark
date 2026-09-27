@@ -39,8 +39,8 @@
 DT_MODULE(1)
 
 // the T_ macros are for the translation engine to take them into account
-#define FALLBACK_PRESET_NAME     "workflow: scene-referred"
-#define T_FALLBACK_PRESET_NAME _("workflow: scene-referred")
+#define FALLBACK_PRESET_NAME     "Lightspeed"
+#define T_FALLBACK_PRESET_NAME _("Lightspeed")
 
 #define DEPRECATED_PRESET_NAME     "modules: deprecated"
 #define T_DEPRECATED_PRESET_NAME _("modules: deprecated")
@@ -1797,6 +1797,111 @@ void init_presets(dt_lib_module_t *self)
   dt_lib_presets_add(_("workflow: scene-referred"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
 
+  // Lightspeed: the Lightroom develop panels first (tone curve, HSL,
+  // color grading, detail, lens corrections, transform, effects,
+  // calibration, healing), then every darktable tool grouped by task.
+  // The basic panel (sliders) sits above the modules, so no quick access.
+  SNQA();
+  SMG(C_("modulegroup", "develop"), "basic");
+  AM("rgbcurve");
+  AM("colorequal");
+  AM("colorbalancergb");
+  AM("sharpen");
+  AM("denoiseprofile");
+  AM("lens");
+  AM("cacorrectrgb");
+  AM("ashift");
+  AM("crop");
+  AM("vignette");
+  AM("grain");
+  AM("channelmixerrgb");
+  AM("retouch");
+
+  SMG(C_("modulegroup", "tone"), "tone");
+  AM("exposure");
+  AM("toneequal");
+  AM("sigmoid");
+  AM("filmicrgb");
+  AM("agx");
+  AM("rgbcurve");
+  AM("rgblevels");
+  AM("tonecurve");
+  AM("shadhi");
+  AM("bilat");
+  AM("atrous");
+  AM("basecurve");
+  AM("highlights");
+  AM("negadoctor");
+
+  SMG(C_("modulegroup", "color"), "color");
+  AM("channelmixerrgb");
+  AM("colorbalancergb");
+  AM("colorequal");
+  AM("colorzones");
+  AM("primaries");
+  AM("temperature");
+  AM("velvia");
+  AM("colorcorrection");
+  AM("colorcontrast");
+  AM("colorharmonizer");
+  AM("colorize");
+  AM("monochrome");
+  AM("splittoning");
+  AM("lut3d");
+  AM("colorchecker");
+  AM("colormapping");
+  AM("colorbalance");
+
+  SMG(C_("modulegroup", "correct"), "correct");
+  AM("lens");
+  AM("ashift");
+  AM("crop");
+  AM("flip");
+  AM("liquify");
+  AM("retouch");
+  AM("denoiseprofile");
+  AM("nlmeans");
+  AM("rawdenoise");
+  AM("hotpixels");
+  AM("cacorrect");
+  AM("cacorrectrgb");
+  AM("sharpen");
+  AM("diffuse");
+  AM("hazeremoval");
+  AM("bilateral");
+  AM("colorreconstruction");
+  AM("enlargecanvas");
+
+  SMG(C_("modulegroup", "effects"), "effect");
+  AM("vignette");
+  AM("grain");
+  AM("bloom");
+  AM("soften");
+  AM("blurs");
+  AM("lowlight");
+  AM("lowpass");
+  AM("highpass");
+  AM("graduatednd");
+  AM("borders");
+  AM("watermark");
+  AM("overlay");
+  AM("censorize");
+
+  SMG(C_("modulegroup", "technical"), "technical");
+  AM("rawprepare");
+  AM("demosaic");
+  AM("temperature");
+  AM("highlights");
+  AM("colorin");
+  AM("colorout");
+  AM("dither");
+  AM("profile_gamma");
+  AM("rasterfile");
+  AM("scalepixels");
+
+  dt_lib_presets_add(_("Lightspeed"),
+                     self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
+
   // search only (only active modules visible)
   SNQA();
   dt_lib_presets_add(_("search only"),
@@ -1823,6 +1928,10 @@ void init_presets(dt_lib_module_t *self)
 #endif
 
   g_free(tx);
+
+  // new configuration: start with the Lightspeed layout
+  if(!dt_conf_key_exists("plugins/darkroom/modulegroups_preset"))
+    dt_conf_set_string("plugins/darkroom/modulegroups_preset", _("Lightspeed"));
 
   // if needed, we add a new preset, based on last user config
   if(!dt_conf_key_exists("plugins/darkroom/modulegroups_preset"))

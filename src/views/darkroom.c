@@ -106,7 +106,7 @@ static void _darkroom_ui_second_window_cleanup(dt_develop_t *dev);
 
 const char *name(const dt_view_t *self)
 {
-  return _("darkroom");
+  return _("Develop");
 }
 
 #ifdef USE_LUA
@@ -3525,6 +3525,9 @@ void enter(dt_view_t *self)
       dt_iop_reload_defaults(module);
     }
   }
+
+  // show the modules in their final order (see lightspeed/lightroom_panel_order)
+  dt_dev_reorder_gui_module_list(dev);
 
   /* signal that darktable.develop is initialized and ready to be used */
   DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_INITIALIZE);

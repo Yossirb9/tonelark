@@ -1,0 +1,276 @@
+/*
+    This file is part of Lightspeed, a darktable fork.
+    Copyright (C) 2026 Lightspeed developers.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* Lightroom Classic inspired theme: charcoal panels, flat headers,
+   thin slider lines with small markers, neutral gray canvas. */
+
+@import url("darktable.css");
+
+/* palette */
+@define-color ls_window     #1f1f1f;   /* top bar, filmstrip, borders */
+@define-color ls_panel      #2d2d2d;   /* side panels */
+@define-color ls_panel_alt  #262626;   /* panel headers / inset areas */
+@define-color ls_line       #171717;   /* separators, slider tracks */
+@define-color ls_text       #b8b8b8;   /* regular text */
+@define-color ls_text_dim   #7d7d7d;   /* secondary text */
+@define-color ls_text_hi    #e8e8e8;   /* active / selected text */
+@define-color ls_canvas     #3a3a3a;   /* develop background */
+@define-color ls_grid       #1e1e1e;   /* library grid background */
+@define-color ls_cell       #353535;   /* library cells */
+@define-color ls_accent     #7da3d8;   /* sparse accent (focus, selection) */
+
+/* General */
+@define-color selected_bg_color #4a4a4a;
+@define-color border_color @ls_line;
+@define-color bg_color @ls_window;
+@define-color fg_color @ls_text;
+@define-color base_color @fg_color;
+@define-color text_color #111111;
+@define-color placeholder_text_color @ls_text_dim;
+@define-color disabled_fg_color #5f5f5f;
+
+/* Scroll bars */
+@define-color scroll_bar_inactive #4a4a4a;
+@define-color scroll_bar_active #6a6a6a;
+@define-color scroll_bar_bg @ls_panel;
+
+/* Modules box (plugins) */
+@define-color plugin_bg_color @ls_panel;
+@define-color section_label #9a9a9a;
+@define-color plugin_label_color #c9c9c9;
+@define-color collapsible_bg_color @ls_panel_alt;
+
+/* Sliders and comboboxes */
+@define-color bauhaus_bg #161616;
+@define-color bauhaus_fill #5c5c5c;
+@define-color bauhaus_fg @ls_text;
+@define-color bauhaus_border @ls_line;
+@define-color bauhaus_indicator_border @ls_panel;
+@define-color bauhaus_bg_hover #505050;
+@define-color bauhaus_fg_hover @ls_text_hi;
+@define-color bauhaus_fg_selected @ls_text_hi;
+@define-color bauhaus_fg_insensitive alpha(@ls_text, 0.4);
+
+/* Buttons and tabs */
+@define-color button_bg #3a3a3a;
+@define-color button_fg @ls_text;
+@define-color button_border #444444;
+@define-color button_hover_bg #585858;
+@define-color button_hover_fg @ls_text_hi;
+
+/* Text fields */
+@define-color field_bg #1b1b1b;
+@define-color field_fg @ls_text_hi;
+@define-color field_active_bg #232323;
+@define-color field_active_fg @ls_text_hi;
+@define-color field_selected_bg #4a4a4a;
+@define-color field_selected_fg #ffffff;
+@define-color field_hover_bg #3c3c3c;
+@define-color field_hover_fg @ls_text_hi;
+
+/* Tooltips */
+@define-color tooltip_bg_color #f0f0e6;
+@define-color tooltip_fg_color #1a1a1a;
+@define-color really_dark_bg_color #0e0e0e;
+@define-color log_fg_color @ls_text_hi;
+
+/* Views */
+@define-color darkroom_bg_color @ls_canvas;
+@define-color darkroom_preview_bg_color @ls_canvas;
+@define-color lighttable_bg_color @ls_grid;
+@define-color lighttable_preview_bg_color @ls_canvas;
+@define-color lighttable_bg_font_color @ls_text;
+@define-color print_bg_color @ls_grid;
+
+/* Library grid and filmstrip */
+@define-color thumbnail_font_color #9a9a9a;
+@define-color thumbnail_bg_color @ls_cell;
+@define-color thumbnail_star_bg_color #262626;
+@define-color thumbnail_star_hover_color @ls_text_hi;
+@define-color thumbnail_localcopy #eeeeee;
+@define-color thumbnail_fg_color #cfcfcf;
+@define-color thumbnail_bg50_color #eeeeee;
+@define-color thumbnail_selected_bg_color #646464;
+@define-color thumbnail_hover_bg_color #4b4b4b;
+@define-color thumbnail_hover_fg_color @ls_text_hi;
+@define-color filmstrip_bg_color @ls_window;
+@define-color timeline_bg_color #181818;
+@define-color timeline_fg_color @ls_text;
+
+/* Graphs (histogram, curves) */
+@define-color graph_bg #1a1a1a;
+@define-color graph_exterior #161616;
+@define-color graph_border #0d0d0d;
+@define-color graph_fg #bdbdbd;
+@define-color graph_fg_active #f2f2f2;
+@define-color graph_grid #2c2c2c;
+@define-color graph_overlay #6a6a6a;
+@define-color inset_histogram alpha(#bdbdbd, 0.45);
+
+/* ---------------------------------------------------------------- fonts */
+
+*,
+box,
+box *,
+.dt_plugin_ui,
+.dt_bauhaus,
+.dt_bauhaus_popup
+{
+  font-family: "Segoe UI", "Roboto", "SF Pro Text", "Ubuntu", "Cantarell",
+               "Arial Unicode MS", sans-serif;
+}
+
+/* -------------------------------------------------------- top bar (identity
+   plate on the left, module picker "Library | Develop | ..." on the right) */
+
+#header-toolbar,
+#footer-toolbar
+{
+  background-color: @ls_window;
+}
+
+#view-label,
+#view-dropdown
+{
+  font-size: 1.25em;
+  font-weight: normal;
+  color: #6f6f6f;
+  padding: 0 0.35em;
+}
+
+#view-label:hover
+{
+  background-color: transparent;
+  color: #b0b0b0;
+}
+
+#view-label:selected
+{
+  color: #f2f2f2;
+}
+
+/* ----------------------------------------------------------- side panels */
+
+#module-header
+{
+  background-color: @ls_panel_alt;
+  border-top: 1px solid #3a3a3a;
+  border-bottom: 1px solid @ls_line;
+  padding: 0.35em 0.5em;
+}
+
+#iop-panel-label,
+#lib-panel-label
+{
+  color: @plugin_label_color;
+  font-family: "Segoe UI Semibold", "Segoe UI", "Roboto Medium", sans-serif;
+  font-weight: 600;
+  font-size: 1.0em;
+}
+
+.dt_module_focus #iop-panel-label
+{
+  color: #ffffff;
+}
+
+#iop-module-name,
+#lib-module-name
+{
+  color: @ls_text_dim;
+  font-size: 0.85em;
+}
+
+.dt_section_label:not(#blending-box),
+#blending-box .dt_section_label label,
+#blending-box .dt_section_label .dt_bauhaus
+{
+  color: @section_label;
+  font-family: "Segoe UI Semibold", "Segoe UI", sans-serif;
+  font-weight: 600;
+}
+
+.dt_section_label
+{
+  border-bottom: 1px solid #3b3b3b;
+}
+
+/* ----------------------------------------------- Lightroom basic panel */
+
+#basicpanel
+{
+  padding: 0.2em 0.1em 0.5em 0.1em;
+}
+
+#basicpanel-section
+{
+  color: #d0d0d0;
+  font-size: 1.0em;
+  border-bottom: none;
+  margin-top: 0.5em;
+}
+
+#basicpanel-treatment
+{
+  margin: 0.3em 0;
+}
+
+#basicpanel-label
+{
+  color: @ls_text_dim;
+  margin-right: 0.6em;
+}
+
+#basicpanel-treatment button,
+#basicpanel button
+{
+  background-color: #383838;
+  border: 1px solid #454545;
+  border-radius: 2px;
+  padding: 0.1em 0.5em;
+  margin: 0 0.1em;
+  color: @ls_text;
+}
+
+#basicpanel-treatment button:checked
+{
+  background-color: #5a5a5a;
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------ buttons */
+
+button,
+.text-button
+{
+  border-radius: 2px;
+}
+
+/* ----------------------------------------------------------- tooltips */
+
+tooltip,
+#range-current
+{
+  border: 1px solid #b9b9a8;
+  border-radius: 2px;
+}
+
+tooltip label,
+#range-current label
+{
+  color: @tooltip_fg_color;
+}
