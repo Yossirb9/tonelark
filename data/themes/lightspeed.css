@@ -338,3 +338,25 @@ tooltip label,
   color: #f4f4f4;
   background-color: transparent;
 }
+
+/* the export button, prominent like Lightroom's "Export" */
+#export-start
+{
+  background-image: none;
+  background-color: @ls_button;
+  border: 1px solid #6a6a6a;
+  border-radius: 2px;
+  color: #eeeeee;
+  padding: 0.3em 0.5em;
+  margin-top: 0.4em;
+}
+
+#export-start:hover
+{
+  background-color: #6e6e6e;
+}
+
+#export-start label
+{
+  color: #eeeeee;
+}

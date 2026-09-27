@@ -74,7 +74,21 @@ static void _import_clicked(GtkButton *b, gpointer data)
 
 static void _export_clicked(GtkButton *b, gpointer data)
 {
-  _run("lib/export/start export");
+  // like the Lightroom export dialog: show the export settings, collapsing
+  // the other panels on the right, the export starts from there
+  dt_lib_module_t *exp_mod = dt_lib_get_module("export");
+  if(!exp_mod) return;
+  if(dt_conf_get_bool("lighttable/ui/single_module"))
+    for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
+    {
+      dt_lib_module_t *m = it->data;
+      if(m != exp_mod && m->expander
+         && dt_lib_get_container(m) == dt_lib_get_container(exp_mod)
+         && m->expandable(m))
+        dt_lib_gui_set_expanded(m, FALSE);
+    }
+  dt_lib_gui_set_expanded(exp_mod, TRUE);
+  dt_control_log(_("choose the export settings on the right, then click \"start export\" (Ctrl+Shift+E)"));
 }
 
 static void _copy_clicked(GtkButton *b, gpointer data)
@@ -87,29 +101,22 @@ static void _paste_clicked(GtkButton *b, gpointer data)
   _run("views/thumbtable/paste history");
 }
 
-static GtkWidget *_button(const char *label, const char *tooltip, GCallback cb)
-{
-  GtkWidget *b = gtk_button_new_with_label(label);
-  gtk_widget_set_tooltip_text(b, tooltip);
-  g_signal_connect_data(b, "clicked", cb, NULL, NULL, 0);
-  return dt_gui_expand(b);
-}
-
 void gui_init(dt_lib_module_t *self)
 {
   dt_lib_panelbuttons_left_t *d = g_malloc0(sizeof(dt_lib_panelbuttons_left_t));
   self->data = d;
 
+  // action buttons: they can also get shortcuts
   d->library_box = dt_gui_hbox(
-    _button(_("Import..."), _("add photos to the library (Ctrl+Shift+I copies and imports)"),
-            G_CALLBACK(_import_clicked)),
-    _button(_("Export..."), _("export the selected photos with the settings of the export module"),
-            G_CALLBACK(_export_clicked)));
+    dt_action_button_new(self, N_("Import..."), _import_clicked, NULL,
+                         _("add photos to the library (Ctrl+Shift+I)"), 0, 0),
+    dt_action_button_new(self, N_("Export..."), _export_clicked, NULL,
+                         _("open the export settings for the selected photos"), 0, 0));
   d->develop_box = dt_gui_hbox(
-    _button(_("Copy..."), _("copy develop settings, choosing which ones (Ctrl+Shift+C)"),
-            G_CALLBACK(_copy_clicked)),
-    _button(_("Paste"), _("paste the copied develop settings (Ctrl+V)"),
-            G_CALLBACK(_paste_clicked)));
+    dt_action_button_new(self, N_("Copy..."), _copy_clicked, NULL,
+                         _("copy develop settings, choosing which ones (Ctrl+Shift+C)"), 0, 0),
+    dt_action_button_new(self, N_("Paste"), _paste_clicked, NULL,
+                         _("paste the copied develop settings (Ctrl+V)"), 0, 0));
 
   self->widget = dt_gui_vbox(d->library_box, d->develop_box);
   gtk_widget_set_name(self->widget, "panel-buttons");

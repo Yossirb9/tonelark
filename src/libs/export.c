@@ -1682,6 +1682,7 @@ void gui_init(dt_lib_module_t *self)
                                  _export_button_clicked, self,
                                  NULL,
                                  GDK_KEY_e, GDK_CONTROL_MASK));
+  gtk_widget_set_name(GTK_WIDGET(d->export_button), "export-start");
 
   self->widget = dt_gui_vbox
     (dt_ui_section_label_new(C_("section", "storage options")),
