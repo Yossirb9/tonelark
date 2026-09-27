@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/lightspeed_version.h"
 #include "gui/gtk.h"
 #include "about.h"
 #ifdef GDK_WINDOWING_QUARTZ

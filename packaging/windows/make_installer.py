@@ -38,7 +38,7 @@ def supported_extensions(build):
 
 
 def lightspeed_version():
-    text = open(os.path.join(SRC, 'src', 'config.cmake.h'), encoding='utf-8').read()
+    text = open(os.path.join(SRC, 'src', 'common', 'lightspeed_version.h'), encoding='utf-8').read()
     m = re.search(r'#define LIGHTSPEED_VERSION "([^"]+)"', text)
     v = m.group(1) if m else '1.0'
     return v if v.count('.') >= 2 else v + '.0'
@@ -68,6 +68,10 @@ def main():
 
     if not os.path.exists(os.path.join(install, 'bin', 'Lightspeed.exe')):
         sys.exit('%s has no bin\\Lightspeed.exe, run cmake --install first' % install)
+
+    # the Python runtime of the AI helper
+    if not os.path.exists(os.path.join(install, 'share', 'darktable', 'lightspeed', 'ai', 'python', 'python.exe')):
+        subprocess.check_call([sys.executable, os.path.join(HERE, 'bundle_python.py'), '--install', install])
 
     cache = cmake_cache(build)
     version = lightspeed_version()

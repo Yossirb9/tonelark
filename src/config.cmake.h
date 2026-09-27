@@ -14,7 +14,6 @@
 extern const char darktable_package_version[];
 
 // version of the Lightspeed fork, shown next to the darktable version
-#define LIGHTSPEED_VERSION "1.0"
 extern const char darktable_package_string[];
 extern const char darktable_last_commit_year[];
 

@@ -6,7 +6,7 @@ add_definitions(-include common/module_api.h)
 add_definitions(-include libs/lib_api.h)
 
 # The modules
-set(MODULES import export copy_history styles tagging image select collect recentcollect filtering metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks session duplicate ioporder basicpanel panelbuttons_left panelbuttons_right)
+set(MODULES import export copy_history styles tagging image select collect recentcollect filtering metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks session duplicate ioporder basicpanel panelbuttons_left panelbuttons_right aicull aiedit)
 
 # The tools
 set(MODULES ${MODULES} viewswitcher)
@@ -50,6 +50,8 @@ add_library(duplicate MODULE "duplicate.c")
 add_library(ioporder MODULE "ioporder.c")
 add_library(basicpanel MODULE "basicpanel.c")
 add_library(panelbuttons_left MODULE "panelbuttons_left.c")
+add_library(aicull MODULE "aicull.c")
+add_library(aiedit MODULE "aiedit.c")
 add_library(panelbuttons_right MODULE "panelbuttons_right.c")
 
 # tools

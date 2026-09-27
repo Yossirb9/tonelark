@@ -141,6 +141,13 @@ install(FILES shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION ${CMAKE_INSTALL_DAT
 install(FILES lightspeed/guide.html DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/lightspeed COMPONENT DTApplication)
 
 #
+# Lightspeed AI helper and its models (the Python runtime is added by
+# packaging/windows/bundle_python.py)
+#
+install(FILES lightspeed/ai/lsai.py DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/lightspeed/ai COMPONENT DTApplication)
+install(DIRECTORY lightspeed/ai/models DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/lightspeed/ai COMPONENT DTApplication)
+
+#
 # Install noiseprofiles
 #
 if(${VALIDATE_JSON})
