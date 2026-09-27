@@ -29,8 +29,18 @@ uint32_t dt_lib_export_metadata_default_flags(void)
 const char flags_keyword[] = "plugins/lighttable/export/metadata_flags";
 const char formula_keyword[] = "plugins/lighttable/export/metadata_formula";
 
+// the flags are never saved empty (at least "0"), an empty value means
+// the key has only been read, never set: use the defaults. Reading a missing
+// key creates it empty, which made darktable-cli export without Exif data
+// with a fresh configuration.
+static gboolean _flags_set(void)
+{
+  return dt_conf_key_exists(flags_keyword) && dt_conf_key_not_empty(flags_keyword);
+}
+
 uint32_t dt_lib_export_metadata_get_conf_flags(void)
 {
+  if(!_flags_set()) return dt_lib_export_metadata_default_flags();
   const char *metadata_flags = dt_conf_get_string_const(flags_keyword);
   const int32_t flags = strtol(metadata_flags, NULL, 16);
   return flags;
@@ -39,7 +49,7 @@ uint32_t dt_lib_export_metadata_get_conf_flags(void)
 char *dt_lib_export_metadata_get_conf(void)
 {
   char *metadata_presets = NULL;
-  if(dt_conf_key_exists(flags_keyword))
+  if(_flags_set())
   {
     metadata_presets = dt_conf_get_string(flags_keyword);
     int i = 0;

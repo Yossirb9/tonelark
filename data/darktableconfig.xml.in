@@ -2776,7 +2776,7 @@
   <dtconfig>
     <name>plugins/imageio/storage/disk/file_directory</name>
     <type>string</type>
-    <default>$(FILE_FOLDER)/darktable_exported/$(FILE_NAME)</default>
+    <default>$(FILE_FOLDER)/Lightspeed Export/$(FILE_NAME)</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
