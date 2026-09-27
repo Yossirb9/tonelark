@@ -54,6 +54,7 @@
   <li><a href="#keys">קיצורי מקלדת</a></li>
   <li><a href="#performance">ביצועים</a></li>
   <li><a href="#data">איפה נשמרים הנתונים</a></li>
+  <li><a href="#compare">מה יש ומה חסר לעומת Lightroom</a></li>
 </ol></nav>
 
 <h2 id="install">1. התקנה ומחשבים נוספים</h2>
@@ -140,6 +141,27 @@
   <li>ליד כל תמונה נשמר גם קובץ <code>.xmp</code> עם העריכה. לכן במחשב אחר מספיק לייבא את תיקיית התמונות, והעריכות מגיעות איתה.</li>
   <li>הסרת התוכנה לא מוחקת את הספרייה ולא את התמונות.</li>
 </ul>
+
+<h2 id="compare">9. מה יש ומה חסר לעומת Lightroom</h2>
+<h3>מסכות (כלים מקומיים)</h3>
+<p>המסכות נמצאות בכל כלי: לוחצים בתחתית הכלי על סמל המסכה, או על אחד הכלים בסרגל שמתחת לתמונה.</p>
+<table>
+  <tr><th>Lightroom</th><th>Lightspeed</th></tr>
+  <tr><td>Brush</td><td>יש: מברשת עם גודל, קשיות ושקיפות</td></tr>
+  <tr><td>Linear Gradient</td><td>יש: מעבר הדרגתי שאפשר גם לעקם</td></tr>
+  <tr><td>Radial Gradient</td><td>יש: אליפסה או עיגול עם ריכוך</td></tr>
+  <tr><td>Luminance Range / Color Range</td><td>יש: מסכה לפי בהירות, גוון, רוויה או ערוץ צבע, עם ריכוך שנשען על קצוות התמונה</td></tr>
+  <tr><td>Add / Subtract / Intersect / Invert</td><td>יש: חיבור, חיסור, חיתוך והיפוך של מסכות</td></tr>
+  <tr><td>Select Object</td><td>יש: מסכת AI מסוג SAM 2.1. לוחצים על אובייקט והמסכה נבנית. המודל יורד פעם אחת מההגדרות</td></tr>
+  <tr><td>Select Subject / Sky / People</td><td>חלקי: אין בחירה אוטומטית בלחיצה אחת. בוחרים עם מסכת ה-AI, או לשמיים עם מסכת בהירות</td></tr>
+  <tr><td>Depth Range</td><td>אין</td></tr>
+</table>
+<h3>שאר הכלים</h3>
+<table>
+  <tr><th>יש</th><td>Basic, ‏Tone Curve, ‏HSL, ‏Color Grading, ‏Calibration, חידוד, הפחתת רעש, הפחתת רעש ב-AI (מקביל ל-Denoise), הגדלה ב-AI (מקביל ל-Super Resolution), Lens Corrections, תיקון פרספקטיבה אוטומטי (מקביל ל-Upright), חיתוך, Vignette, ‏Grain, ‏Dehaze, ריפוי ושכפול, מיזוג HDR, ‏Snapshots, ‏History, ‏Presets, לפני/אחרי, Soft Proofing, ‏Virtual Copies, ‏Stacks, מפה, מצגת, צילום בחיבור למחשב (Tethering), סימן מים ומסגרות</td></tr>
+  <tr><th>יש, ולא ב-Lightroom</th><td>Tone Equalizer, ‏Liquify, מספר עותקים של כל כלי, עבודה בכל כלי עם מסכות משלו, סקריפטים ב-Lua, וייצוא משורת הפקודה</td></tr>
+  <tr><th>חסר</th><td>מחיקה גנרטיבית (Generative Remove) ו-Lens Blur, מיזוג פנורמה, זיהוי פנים (People), תיקון עיניים אדומות (אפשר עם הריפוי), Auto Sync חי בין תמונות (יש העתקה והדבקה ו-Sync Settings), עריכת וידאו, סנכרון לענן ולמובייל, ייבוא Presets של Lightroom, ומודול הדפסה ב-Windows (מייצאים ל-PDF או ל-TIFF ומדפיסים)</td></tr>
+</table>
 
 <p style="color:var(--dim);margin-top:40px">Lightspeed מבוסס על darktable (רישיון GPL v3). קוד המקור של darktable זמין ב-<span class="ltr">github.com/darktable-org/darktable</span>.</p>
 </main>
