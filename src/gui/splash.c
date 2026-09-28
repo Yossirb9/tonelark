@@ -121,7 +121,7 @@ void dt_splash_screen_create(const gboolean force)
   darktable.splash.remaining_text = gtk_label_new("");
   gtk_widget_set_name(darktable.splash.remaining_text, "splashscreen-remaining");
   // Lightspeed's version, darktable's is in the about dialog
-  gchar *version_str = g_strdup(LIGHTSPEED_VERSION);
+  gchar *version_str = g_strdup(LIGHTSPEED_VERSION_LABEL);
   GtkWidget *version = GTK_WIDGET(gtk_label_new(version_str));
   g_free(version_str);
   gtk_widget_set_name(version, "splashscreen-version");

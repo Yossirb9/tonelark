@@ -12,3 +12,7 @@
 
 // the Lightspeed release, shown with the darktable version it is built on
 #define LIGHTSPEED_VERSION "1.2.0"
+
+// shown next to the version while Lightspeed is in public testing ("" when stable)
+#define LIGHTSPEED_STAGE "beta"
+#define LIGHTSPEED_VERSION_LABEL LIGHTSPEED_VERSION " " LIGHTSPEED_STAGE

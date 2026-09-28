@@ -86,6 +86,7 @@ Source: "lib\*"; DestDir: "{app}\lib"; Flags: ignoreversion recursesubdirs creat
 Source: "share\*"; DestDir: "{app}\share"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "AUTHORS"; DestDir: "{app}"; DestName: "AUTHORS.txt"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; DestName: "THIRD_PARTY_NOTICES.txt"; Flags: ignoreversion
 
 [InstallDelete]
 ; older builds of the same version

@@ -31,7 +31,7 @@ void darktable_show_about_dialog()
   dt_osx_disallow_fullscreen(dialog);
 #endif
   gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Lightspeed");
-  gchar *version = g_strdup_printf("%s (darktable %s)", LIGHTSPEED_VERSION,
+  gchar *version = g_strdup_printf("%s (darktable %s)", LIGHTSPEED_VERSION_LABEL,
                                    darktable_package_version);
   gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), version);
   g_free(version);
@@ -41,7 +41,9 @@ void darktable_show_about_dialog()
   g_free(copyright);
   gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog),
                                 _("organize and develop images from digital cameras - "
-                                  "a darktable fork with a Lightroom-style workflow"));
+                                  "a darktable fork with a Lightroom-style workflow.\n"
+                                  "not affiliated with or endorsed by Adobe; Adobe and Lightroom"
+                                  " are trademarks of Adobe Inc."));
   gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://www.darktable.org/");
   gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "website");
   const dt_logo_season_t season = dt_util_get_logo_season();

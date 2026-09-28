@@ -73,6 +73,14 @@ def main():
     if not os.path.exists(os.path.join(install, 'share', 'darktable', 'lightspeed', 'ai', 'python', 'python.exe')):
         subprocess.check_call([sys.executable, os.path.join(HERE, 'bundle_python.py'), '--install', install])
 
+    # licenses of the bundled libraries (MSYS2 packages): THIRD_PARTY_NOTICES.md
+    # and share/licenses, made in the MSYS2 shell that knows the packages
+    msys_bash = os.environ.get('MSYS2_BASH', r'C:\msys64\usr\bin\bash.exe')
+    env = dict(os.environ, MSYSTEM='UCRT64', CHERE_INVOKING='1', MSYS2_PATH_TYPE='minimal')
+    script = os.path.join(SRC, 'tools', 'lightspeed', 'third_party.py').replace(os.sep, '/')
+    subprocess.check_call([msys_bash, '-lc', 'python "%s" "%s"' % (script, install.replace(os.sep, '/'))],
+                          env=env)
+
     cache = cmake_cache(build)
     version = lightspeed_version()
 
