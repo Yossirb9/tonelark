@@ -40,7 +40,8 @@ GRADE = {  # zone -> hue key, saturation key
 VOCABULARY = """Exposure -5..5 (EV); Contrast, Highlights, Shadows, Whites, Blacks, Texture, Clarity, Dehaze, Vibrance, Saturation -100..100;
 Temperature 2000..25000 (Kelvin of the light: higher makes the photo warmer/yellower, lower cooler/bluer); Tint -150..150 (positive = magenta, negative = green);
 HSL: {"Orange": {"hue": -100..100, "sat": -100..100, "lum": -100..100}, ...} for Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta (skin is mostly Orange);
-ColorGrade: {"Shadows": {"hue": 0..360, "sat": 0..100}, "Midtones": {...}, "Highlights": {...}, "Global": {...}} (hue 0 red, 45 orange, 60 yellow, 120 green, 200 cyan-blue, 240 blue, 300 magenta; sat 5..25 is subtle);
+ColorGrade: {"Shadows": {"hue": 0..360, "sat": 0..100}, "Midtones": {...}, "Highlights": {...}, "Global": {...}} (hue 0 red, 45 orange, 60 yellow, 120 green, 200 cyan-blue, 240 blue, 300 magenta; sat 5..25 is subtle, 25..50 strong);
+Vignette -100..100 (negative darkens the corners and draws the eye to the subject, -15..-35 is usual);
 Monochrome: true or false."""
 
 
@@ -81,6 +82,9 @@ def friendly(crs):
             grade[zone] = dict(hue=int(round(_num(crs.get(hk)))), sat=int(round(s)))
     if grade:
         out['ColorGrade'] = grade
+    vignette = int(round(_num(crs.get('PostCropVignetteAmount'))))
+    if vignette:
+        out['Vignette'] = vignette
     if str(crs.get('ConvertToGrayscale')) in ('True', 'true', '1'):
         out['Monochrome'] = True
     return out
@@ -161,6 +165,10 @@ def to_crs(settings, current=None):
     mono = lower.get('monochrome', lower.get('blackandwhite', lower.get('bw')))
     if mono is not None:
         crs['ConvertToGrayscale'] = 'True' if str(mono).lower() in ('true', '1', 'yes') else 'False'
+    vignette = lower.get('vignette', lower.get('postcropvignetteamount'))
+    if vignette is not None:
+        crs.update(PostCropVignetteAmount=round(clamp(_num(vignette), -100, 100)), PostCropVignetteMidpoint=50,
+                   PostCropVignetteFeather=50, PostCropVignetteRoundness=0, PostCropVignetteStyle=1)
     return crs
 
 

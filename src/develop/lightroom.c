@@ -1601,6 +1601,31 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
     }
   }
 
+  // post-crop vignette: an import adds it with the other darktable modules,
+  // an update (AI, chat) changes the vignette of the develop
+  dt_iop_module_t *vig = update ? _lr_instance(dev, "vignette", NULL) : NULL;
+  if(update && _crs_float(&d, "PostCropVignetteAmount", &v) && (v != 0.0f || (vig && vig->enabled)))
+  {
+    dt_iop_vignette_params_t *pv = _lr_params(&d, "vignette", NULL);
+    if(pv)
+    {
+      float mid = 50.0f, feather = 50.0f;
+      _crs_float(&d, "PostCropVignetteMidpoint", &mid);
+      _crs_float(&d, "PostCropVignetteFeather", &feather);
+      const float w = dev->image_storage.width, h = dev->image_storage.height;
+      pv->brightness = lr2dt_vignette_gain(v);
+      pv->saturation = v != 0.0f ? -0.3f : 0.0f;
+      pv->scale = lr2dt_vignette_midpoint(mid);
+      pv->falloff_scale = feather;
+      pv->autoratio = FALSE;
+      pv->dithering = DITHER_OFF;
+      pv->center.x = 0.0f;
+      pv->center.y = 0.0f;
+      pv->shape = 1.0f;
+      pv->whratio = 1.325f / 1.5f * (w > 0.0f && h > 0.0f ? w / h : 1.5f);
+    }
+  }
+
   // detail: sharpening and noise reduction
   float radius = 1.0f;
   _crs_float(&d, "SharpenRadius", &radius);
@@ -1956,7 +1981,9 @@ static gboolean _lightroom_import_doc(const dt_imgid_t imgid,
     const float base_ratio = 1.325 / 1.5;
 
     data.pv.autoratio = FALSE;
-    data.pv.dithering = DITHER_8BIT;
+    // no dithering: the vignette works on linear values, where 1/256 is a lot
+    // of noise in the shadows
+    data.pv.dithering = DITHER_OFF;
     data.pv.center.x = 0.0;
     data.pv.center.y = 0.0;
     data.pv.shape = 1.0;
@@ -2283,6 +2310,17 @@ GHashTable *dt_lightroom_read_develop(dt_develop_t *dev)
     _put(out, grading[k].hue, hue, 0);
     _put(out, grading[k].sat, sat, 0);
   }
+
+  // post-crop vignette: inverse of lr2dt_vignette_gain
+  float vignette = 0.0f;
+  m = _lr_instance(dev, "vignette", NULL);
+  if(m && m->enabled && m->so->get_p)
+  {
+    const float *b = m->so->get_p(m->params, "brightness");
+    lr2dt_t dt2lr[] = { { -1, -100 }, { -0.7, -50 }, { 0, 0 }, { 0.5, 50 }, { 1, 100 } };
+    if(b) vignette = get_interpolate(dt2lr, CLAMP(*b, -1.0f, 1.0f));
+  }
+  _put(out, "PostCropVignetteAmount", vignette, 0);
   return out;
 }
 

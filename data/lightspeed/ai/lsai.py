@@ -844,7 +844,11 @@ def cmd_genedit(req):
 AUTOEDIT_ONE = """You are a professional photo retoucher working with Lightroom sliders. The image {name} is a photo as it looks now.
 Its current settings: {current}
 The photographer asks: "{request}"
-Choose Lightroom settings that do this with a natural, professional result: keep skin tones natural, do not clip highlights or crush blacks unless asked, and keep the white balance believable.
+Choose Lightroom settings that do this and make it a finished, striking photo, as in the portfolio of a top photographer.
+A RAW file starts flat, so a finished edit almost always needs real contrast and depth: rich blacks, clean bright whites, clear midtones, and a subject that stands out from its background (Contrast, Whites, Blacks, Clarity, Dehaze, Vibrance, Vignette).
+Match the strength to the request: bold, dramatic, cinematic, moody or vivid asks for bold values; natural, soft or airy stays gentle.
+Keep the subject well exposed and readable, keep skin tones natural and the white balance believable unless asked otherwise, and do not clip large bright areas.
+Color: a warm or cool mood comes from the sky and the light, not from a cast over everything. Keep things that are neutral in reality (grey animals, stone, white clothes, snow) close to neutral, give color contrast (warm highlights against cooler shadows) rather than one color over the whole photo, and keep ColorGrade Midtones and Global low.
 Settings you can use (values are absolute, not added to the current ones; only give the ones that change):
 {vocabulary}
 Answer with JSON only, no other text:
@@ -852,7 +856,7 @@ Answer with JSON only, no other text:
 
 AUTOEDIT_REFINE = """You edited a photo for the request "{request}". The image {name} shows the result.
 The settings now: {current}
-Look at the result critically, as a professional retoucher: exposure, white balance, skin tones, clipped highlights or blacks, too much or too little of what was asked.
+Look at the result critically, as a professional retoucher. Is it a finished, striking photo? Check contrast and depth first (flat grey blacks and dull midtones are the most common problem), whether the subject stands out, then exposure (a subject too dark to read), white balance and color casts (one color over the whole photo, too yellow, too red or too blue, neutral things that are not neutral), skin tones, clipped highlights, too much or too little of what was asked.
 If it can be better, give the settings that change (absolute values, only the ones that change). If it is good, give an empty "settings".
 Settings you can use:
 {vocabulary}
@@ -861,7 +865,7 @@ Answer with JSON only, no other text:
 
 AUTOEDIT_SHEET = """The image {sheet} is a contact sheet of {n} photos, each marked with a yellow number (1 to {n}).
 {reference}The photographer asks for these photos: "{request}"
-Give every photo its own Lightroom settings to do this: the photos differ in light, so adapt exposure and white balance to each one, and keep the look consistent across the set. Keep skin tones natural and do not clip highlights.
+Give every photo its own Lightroom settings to do this: the photos differ in light, so adapt exposure and white balance to each one, and keep the look consistent across the set. Make every photo look finished, with real contrast and depth (RAW files start flat). Keep skin tones natural and do not clip highlights.
 Current settings of each photo:
 {current}
 Settings you can use (values are absolute, not added to the current ones; only give the ones that change):
@@ -885,7 +889,7 @@ def cmd_autoedit(req):
     model = req.get('model', '')
     timeout = int(req.get('timeout', 600))
     request = (req.get('instruction') or '').strip() or \
-        'a clean, balanced professional edit that makes this photo look its best'
+        'a finished professional edit with good contrast and depth that makes this photo look its best'
     work = tempfile.mkdtemp(prefix='lsai_edit_')
     results, errors = [], []
 
