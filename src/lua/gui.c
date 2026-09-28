@@ -101,7 +101,14 @@ static int _current_view_cb(lua_State *L)
     luaA_to(L, dt_lua_view_t, &view, 1);
     dt_ctl_switch_mode_to_by_view(view);
   }
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  const dt_view_t *current_view = darktable.view_manager
+    ? dt_view_manager_get_current_view(darktable.view_manager) : NULL;
+  // no view while the program starts or closes (scripts still running)
+  if(!current_view)
+  {
+    lua_pushnil(L);
+    return 1;
+  }
   dt_lua_module_entry_push(L, "view", current_view->module_name);
   return 1;
 }
