@@ -136,12 +136,12 @@ FILE(COPY shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
 
 #
-# Lightspeed user guide
+# Tonelark user guide
 #
 install(FILES lightspeed/guide.html DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/lightspeed COMPONENT DTApplication)
 
 #
-# Lightspeed AI helper and its models (the Python runtime is added by
+# Tonelark AI helper and its models (the Python runtime is added by
 # packaging/windows/bundle_python.py)
 #
 install(FILES lightspeed/ai/lsai.py lightspeed/ai/lsedit.py lightspeed/ai/lsmcp.py DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/lightspeed/ai COMPONENT DTApplication)

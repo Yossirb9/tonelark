@@ -2375,7 +2375,7 @@ void init(dt_lib_module_t *self)
 #endif
 
 // ---------------------------------------------------------------------------
-// Lightspeed: import of Lightroom catalogs
+// Tonelark: import of Lightroom catalogs
 
 static void _lib_import_lightroom_callback(GtkWidget *widget, dt_lib_module_t *self)
 {

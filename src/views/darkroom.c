@@ -4989,7 +4989,7 @@ static void _darkroom_display_second_window(dt_develop_t *dev)
     _second_window_configure_ppd_dpi(dev);
 
     gtk_window_set_icon_name(GTK_WINDOW(dev->second_wnd), "darktable");
-    gtk_window_set_title(GTK_WINDOW(dev->second_wnd), _("Lightspeed - develop preview"));
+    gtk_window_set_title(GTK_WINDOW(dev->second_wnd), _("Tonelark - develop preview"));
 
 #ifndef GDK_WINDOWING_QUARTZ
     // On macOS, transient_for is implemented via [NSWindow addChildWindow:ordered:],

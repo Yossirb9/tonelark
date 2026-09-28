@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,11 +20,11 @@
 
 /*
   Chat bridge: lets Claude Code, Codex or Gemini CLI work with the running
-  Lightspeed through its MCP server (share/darktable/lightspeed/ai/lsmcp.py).
+  Tonelark through its MCP server (share/darktable/lightspeed/ai/lsmcp.py).
 
   The MCP server writes requests as JSON files into <config dir>/mcp/in, the
-  bridge answers into <config dir>/mcp/out. <config dir>/mcp/lightspeed.json
-  tells that Lightspeed is running (process id, heartbeat).
+  bridge answers into <config dir>/mcp/out. <config dir>/mcp/tonelark.json
+  tells that Tonelark is running (process id, heartbeat).
 */
 
 #include <glib.h>

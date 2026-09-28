@@ -1,6 +1,6 @@
-"""Lightspeed AI helper.
+"""Tonelark AI helper.
 
-Runs next to Lightspeed (darktable) and does the work that needs computer
+Runs next to Tonelark (darktable) and does the work that needs computer
 vision or an AI model:
 
   cull      local culling: quality of every photo (sharpness, exposure, faces:
@@ -13,12 +13,12 @@ vision or an AI model:
   genedit   generative edit of a region with Codex's image model, only the
             region is blended back into the full resolution image
   autoedit  edit with words: the model looks at the photo(s) and answers with
-            Lightroom settings, applied by Lightspeed as a normal edit
+            Lightroom settings, applied by Tonelark as a normal edit
   match     Match Look: exposure and white balance of photos matched to a
             reference photo (on this computer)
   keywords  keywords, title and caption of photos on contact sheets
   crop      crop and straighten suggestions
-  mcp       connect Claude Code / Codex / Gemini chats to Lightspeed (MCP)
+  mcp       connect Claude Code / Codex / Gemini chats to Tonelark (MCP)
   providers which command line AI tools are installed and logged in
 
     python lsai.py <command> <request.json> <response.json>
@@ -1200,10 +1200,10 @@ def cmd_crop(req):
 
 
 # ---------------------------------------------------------------------------
-# chats: register the Lightspeed MCP server in the AI tools
+# chats: register the Tonelark MCP server in the AI tools
 
 def _codex_auto_approve():
-    """the Lightspeed tools work on the user's own photos, with undo: Codex
+    """the Tonelark tools work on the user's own photos, with undo: Codex
     runs them without asking every time"""
     path = os.path.join(os.environ.get('CODEX_HOME') or os.path.join(os.path.expanduser('~'), '.codex'),
                         'config.toml')
@@ -1215,7 +1215,7 @@ def _codex_auto_approve():
     out, section = [], False
     for line in lines:
         if line.strip().startswith('['):
-            section = line.strip() == '[mcp_servers.lightspeed]'
+            section = line.strip() == '[mcp_servers.tonelark]'
             out.append(line)
             if section:
                 out.append('default_tools_approval_mode = "approve"')
@@ -1237,16 +1237,18 @@ def cmd_mcp(req):
             out[tool] = 'not installed'
             continue
         progress(0.3, 'connecting %s' % tool)
+        # (the first versions were called Lightspeed: that entry goes too)
         if tool == 'claude':
-            remove = [exe, 'mcp', 'remove', '-s', 'user', 'lightspeed']
-            add = [exe, 'mcp', 'add', '-s', 'user', 'lightspeed', '--', python, server]
+            removes = [[exe, 'mcp', 'remove', '-s', 'user', n] for n in ('lightspeed', 'tonelark')]
+            add = [exe, 'mcp', 'add', '-s', 'user', 'tonelark', '--', python, server]
         elif tool == 'codex':
-            remove = [exe, 'mcp', 'remove', 'lightspeed']
-            add = [exe, 'mcp', 'add', 'lightspeed', '--', python, server]
+            removes = [[exe, 'mcp', 'remove', n] for n in ('lightspeed', 'tonelark')]
+            add = [exe, 'mcp', 'add', 'tonelark', '--', python, server]
         else:
-            remove = [exe, 'mcp', 'remove', '-s', 'user', 'lightspeed']
-            add = [exe, 'mcp', 'add', '-s', 'user', 'lightspeed', python, server]
-        _status(remove, 60)
+            removes = [[exe, 'mcp', 'remove', '-s', 'user', n] for n in ('lightspeed', 'tonelark')]
+            add = [exe, 'mcp', 'add', '-s', 'user', 'tonelark', python, server]
+        for remove in removes:
+            _status(remove, 60)
         rc, text = _status(add, 60)
         if rc == 0 and tool == 'codex':
             _codex_auto_approve()

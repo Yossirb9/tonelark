@@ -686,7 +686,7 @@ int main(int argc, char *arg[])
       dt_image_cache_write_release(image, DT_IMAGE_CACHE_RELAXED);
     }
 
-    // Lightspeed: a Lightroom XMP (Camera Raw settings, no darktable
+    // Tonelark: a Lightroom XMP (Camera Raw settings, no darktable
     // history) develops the images like the Lightroom catalog import
     gchar *xmp = NULL;
     gsize xmp_len = 0;
@@ -754,7 +754,7 @@ int main(int argc, char *arg[])
     }
   }
 
-  // Lightspeed: an .xmp output writes the development of the first image as a
+  // Tonelark: an .xmp output writes the development of the first image as a
   // darktable sidecar, e.g. to convert Lightroom settings
   if(!g_ascii_strcasecmp(output_ext, "xmp"))
   {

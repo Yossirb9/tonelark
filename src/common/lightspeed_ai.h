@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 #pragma once
 
 /*
-  AI features of Lightspeed. The work is done by a helper script
+  AI features of Tonelark. The work is done by a helper script
   (share/darktable/lightspeed/ai/lsai.py, run by a bundled Python): local
   culling, Best Take, and requests to the AI command line tools installed on
   the computer (Claude Code, Codex, Gemini CLI), which use the user's

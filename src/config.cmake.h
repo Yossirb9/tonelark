@@ -13,7 +13,7 @@
 // these will be defined in build/bin/version_gen.c
 extern const char darktable_package_version[];
 
-// version of the Lightspeed fork, shown next to the darktable version
+// version of the Tonelark fork, shown next to the darktable version
 extern const char darktable_package_string[];
 extern const char darktable_last_commit_year[];
 

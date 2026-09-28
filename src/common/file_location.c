@@ -21,6 +21,7 @@
     || defined _SVID_SOURCE || defined _POSIX_SOURCE || defined __DragonFly__ || defined __FreeBSD__         \
     || defined __NetBSD__ || defined __OpenBSD__
 
+#include <glib/gstdio.h>
 #include <pwd.h>
 #include <sys/types.h>
 #define HAVE_GETPWNAM_R 1
@@ -189,9 +190,28 @@ gchar *dt_loc_init_generic(const char *absolute_value,
   return result;
 }
 
+// Tonelark was first called Lightspeed: its folder moves over once
+static char *_default_dir(const char *base)
+{
+  char *dir = g_build_filename(base, "tonelark", NULL);
+  char *old = g_build_filename(base, "lightspeed", NULL);
+  if(!g_file_test(dir, G_FILE_TEST_EXISTS) && g_file_test(old, G_FILE_TEST_IS_DIR))
+  {
+    if(g_rename(old, dir) != 0)
+    {
+      // in use (the old version is running): keep working in it
+      g_free(dir);
+      dir = old;
+      old = NULL;
+    }
+  }
+  g_free(old);
+  return dir;
+}
+
 gboolean dt_loc_init_user_config_dir(const char *configdir)
 {
-  char *default_config_dir = g_build_filename(g_get_user_config_dir(), "lightspeed", NULL);
+  char *default_config_dir = _default_dir(g_get_user_config_dir());
   darktable.configdir = dt_loc_init_generic(configdir, NULL, default_config_dir);
   g_free(default_config_dir);
   return dt_check_opendir("darktable.configdir", darktable.configdir);
@@ -205,7 +225,7 @@ gboolean dt_loc_init_tmp_dir(const char *tmpdir)
 
 gboolean dt_loc_init_user_cache_dir(const char *cachedir)
 {
-  char *default_cache_dir = g_build_filename(g_get_user_cache_dir(), "lightspeed", NULL);
+  char *default_cache_dir = _default_dir(g_get_user_cache_dir());
   darktable.cachedir = dt_loc_init_generic(cachedir, NULL, default_cache_dir);
   g_free(default_cache_dir);
   return dt_check_opendir("darktable.cachedir", darktable.cachedir);

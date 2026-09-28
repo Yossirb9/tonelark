@@ -571,7 +571,7 @@ gboolean dt_workspace_create(const char *datadir)
   GtkDialogFlags flags = GTK_DIALOG_DESTROY_WITH_PARENT;
 #endif
   session->db_screen =
-    gtk_dialog_new_with_buttons(_("Lightspeed - select a workspace"),
+    gtk_dialog_new_with_buttons(_("Tonelark - select a workspace"),
                                 NULL, flags,
                                 NULL,
                                 GTK_RESPONSE_NONE,

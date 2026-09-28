@@ -1609,7 +1609,7 @@ static void _accels_window_sticky(GtkWidget *widget,
   // creating new window
   GtkWindow *win = GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
   dt_gui_add_class(GTK_WIDGET(win), "dt_accels_window");
-  gtk_window_set_title(win, _("Lightspeed - keyboard shortcuts"));
+  gtk_window_set_title(win, _("Tonelark - keyboard shortcuts"));
   GtkAllocation alloc;
   gtk_widget_get_allocation(dt_ui_main_window(darktable.gui->ui), &alloc);
 

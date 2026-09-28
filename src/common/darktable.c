@@ -1353,7 +1353,7 @@ int dt_init(int argc,
       }
       else if(!strcmp(argv[k], "--import-lightroom") && argc > k + 1)
       {
-        // Lightspeed: import a Lightroom catalog after startup
+        // Tonelark: import a Lightroom catalog after startup
         lightroom_catalog = argv[++k];
         argv[k-1] = NULL;
         argv[k] = NULL;
@@ -1444,7 +1444,7 @@ int dt_init(int argc,
     }
     else if(init_gui)
     {
-      // Lightspeed: opening a Lightroom catalog (double click, open with)
+      // Tonelark: opening a Lightroom catalog (double click, open with)
       // imports it
       gchar *lower = g_ascii_strdown(argv[k], -1);
       if(g_str_has_suffix(lower, ".lrcat"))
@@ -1677,9 +1677,9 @@ int dt_init(int argc,
           "%s\n"
           "\n"
           "please fix this and then run darktable again"), which_failed);
-      dt_gui_show_standalone_yes_no_dialog(_("Lightspeed - unable to create directories"),
+      dt_gui_show_standalone_yes_no_dialog(_("Tonelark - unable to create directories"),
                                            user_dirs_failure_text,
-                                           _("_quit Lightspeed"),
+                                           _("_quit Tonelark"),
                                            NULL);
       // There is no REAL need to free the string before exiting, but we do it
       // to avoid creating a code pattern that could be mistakenly copy-pasted
@@ -2075,7 +2075,7 @@ int dt_init(int argc,
   {
     dt_ctl_switch_mode_to("lighttable");
 
-    // Claude Code / Codex chats can work with Lightspeed (MCP server)
+    // Claude Code / Codex chats can work with Tonelark (MCP server)
     dt_lsbridge_start();
 
     // all the default shortcuts have been registered

@@ -319,8 +319,8 @@
     <name>plugins/lightspeed/ai/chat_bridge</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>let AI chats work with Lightspeed</shortdescription>
-    <longdescription>Claude Code, Codex or Gemini chats connected to Lightspeed (MCP server) can list, view, rate, tag, edit and export the photos of the running Lightspeed</longdescription>
+    <shortdescription>let AI chats work with Tonelark</shortdescription>
+    <longdescription>Claude Code, Codex or Gemini chats connected to Tonelark (MCP server) can list, view, rate, tag, edit and export the photos of the running Tonelark</longdescription>
   </dtconfig>
   <dtconfig>
     <name>opencl_guided_filter</name>
@@ -2790,7 +2790,7 @@
   <dtconfig>
     <name>plugins/imageio/storage/disk/file_directory</name>
     <type>string</type>
-    <default>$(FILE_FOLDER)/Lightspeed Export/$(FILE_NAME)</default>
+    <default>$(FILE_FOLDER)/Tonelark Export/$(FILE_NAME)</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
@@ -3828,10 +3828,10 @@
   <dtconfig common="yes">
     <name>ui_last/theme</name>
     <type>string</type>
-    <default>lightspeed</default>
+    <default>tonelark</default>
     <shortdescription>darktable theme</shortdescription>
     <longdescription><![CDATA[the shade around your photo affects how you see its colors and tones while editing. grey is recommended because it's the most neutral – it doesn't push your eye in any direction\n\n<b>grey:</b> best for accurate color work\n\n<b>dark:</b> less distracting around your image\n\n<b>darker:</b> good for dimly-lit rooms]]></longdescription>
-    <welcomescreen pagenum="6" questionnum="1" options="lightspeed|lightroom style,darktable-elegant-grey|grey,darktable-elegant-dark|dark,darktable-elegant-darker|darker"/>
+    <welcomescreen pagenum="6" questionnum="1" options="tonelark|lightroom style,darktable-elegant-grey|grey,darktable-elegant-dark|dark,darktable-elegant-darker|darker"/>
   </dtconfig>
   <dtconfig prefs="misc" section="interface">
     <name>ui_last/display_profile_source</name>

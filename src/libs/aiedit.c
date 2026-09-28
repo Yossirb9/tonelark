@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

@@ -30,7 +30,7 @@ void darktable_show_about_dialog()
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);
 #endif
-  gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Lightspeed");
+  gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Tonelark");
   gchar *version = g_strdup_printf("%s (darktable %s)", LIGHTSPEED_VERSION_LABEL,
                                    darktable_package_version);
   gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), version);

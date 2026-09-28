@@ -1,6 +1,6 @@
-# Incremental build + install of Lightspeed. Usage: powershell -File C:\lightspeed\build.ps1 [-NoInstall]
+# Incremental build + install of Tonelark. Usage: powershell -File C:\lightspeed\build.ps1 [-NoInstall]
 param([switch]$NoInstall)
-Get-Process darktable,Lightspeed,darktable-cli -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process darktable,Tonelark,darktable-cli -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep 1
 $log = "C:\lightspeed\build_last.log"
 $cmd = "cd /c/lightspeed/build && ninja -j12 > /c/lightspeed/build_last.log 2>&1; rc=`$?; echo NINJA_RC=`$rc >> /c/lightspeed/build_last.log"

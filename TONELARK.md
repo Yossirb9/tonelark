@@ -1,4 +1,4 @@
-# Lightspeed
+# Tonelark
 
 A fork of [darktable](https://github.com/darktable-org/darktable) 5.6.1 with a Lightroom Classic
 style interface and Lightroom catalog import. darktable's processing engine is unchanged.
@@ -36,7 +36,7 @@ style interface and Lightroom catalog import. darktable's processing engine is u
   balance, optional AI fine-tuning), *Suggest Crops* (crop module + rotate and perspective),
   *Keywords & Captions*.
 - Chat bridge (MCP, 1.2): `data/lightspeed/ai/lsmcp.py` is an MCP server (stdio) for Claude
-  Code, Codex and Gemini CLI; it talks to the running Lightspeed through request files in
+  Code, Codex and Gemini CLI; it talks to the running Tonelark through request files in
   `<config dir>/mcp` (`src/common/lightspeed_bridge.c`). *Connect Chat* registers it.
 - White balance tint follows Adobe's definition (Planckian locus, positive = green light, the
   photo gets more magenta), so Lightroom tints import with the right sign.

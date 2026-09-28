@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -109,7 +109,7 @@ static void _heartbeat(void)
   json_object_set_string_member(o, "version", LIGHTSPEED_VERSION);
   json_object_set_int_member(o, "time", g_get_real_time() / G_USEC_PER_SEC);
   json_object_set_string_member(o, "configdir", darktable.configdir);
-  gchar *path = g_build_filename(_dir, "lightspeed.json", NULL);
+  gchar *path = g_build_filename(_dir, "tonelark.json", NULL);
   _write_object(path, o);
   json_object_unref(o);
   g_free(path);
@@ -864,7 +864,7 @@ void dt_lsbridge_stop(void)
   if(!_timer) return;
   g_source_remove(_timer);
   _timer = 0;
-  gchar *path = g_build_filename(_dir, "lightspeed.json", NULL);
+  gchar *path = g_build_filename(_dir, "tonelark.json", NULL);
   g_unlink(path);
   g_free(path);
   g_free(_dir);

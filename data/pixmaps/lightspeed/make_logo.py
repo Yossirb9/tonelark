@@ -1,4 +1,4 @@
-"""Lightspeed logo: a lens aperture whose six blades glow in golden-hour
+"""Tonelark logo: a lens aperture whose six blades glow in golden-hour
 colours around a point of light, on a night-blue rounded square.
 
 Writes the master SVGs and renders every PNG/ICO the application and the
@@ -119,11 +119,11 @@ def icon_svg(size=1024, small=False):
 
 
 def wordmark_svg():
-    # "Light" regular, "speed" bold, as in the header
+    # "Tone" regular, "lark" bold, as in the header
     return '''<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="112" height="20" viewBox="0 0 112 20">
   <text x="0" y="16" font-family="Segoe UI Light, Segoe UI, Roboto Light, sans-serif" font-weight="300"
-        font-size="18" fill="#d9d9d9" letter-spacing="0.3">Light<tspan font-weight="600" fill="#ffffff">speed</tspan></text>
+        font-size="18" fill="#d9d9d9" letter-spacing="0.3">Tone<tspan font-weight="600" fill="#ffffff">lark</tspan></text>
 </svg>
 '''
 

@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -264,7 +264,7 @@ dt_lrcat_t *dt_lrcat_open(const char *filename, GError **error)
   // original must never be touched
   char tmpdir[PATH_MAX] = { 0 };
   dt_loc_get_tmp_dir(tmpdir, sizeof(tmpdir));
-  gchar *name = g_strdup_printf("lightspeed-import-%u.lrcat", g_random_int());
+  gchar *name = g_strdup_printf("tonelark-import-%u.lrcat", g_random_int());
   cat->copy = g_build_filename(tmpdir, name, NULL);
   g_free(name);
 
@@ -1230,7 +1230,7 @@ int dt_lrcat_import_run(dt_lrcat_t *cat, const dt_lrcat_options_t *options, dt_j
       g_free(path);
       if(!dt_is_valid_imgid(imgid)) continue;
       new_images = g_list_prepend(new_images, GINT_TO_POINTER(imgid));
-      // darktable sidecar found (image already edited with Lightspeed/darktable)
+      // darktable sidecar found (image already edited with Tonelark/darktable)
       if(_history_count(imgid) > 0)
         g_hash_table_add(keep_develop, GINT_TO_POINTER(imgid));
     }

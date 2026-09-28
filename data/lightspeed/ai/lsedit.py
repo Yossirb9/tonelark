@@ -1,5 +1,5 @@
-"""Lightspeed edit settings: the Lightroom words the AI models know, and the
-Camera Raw (crs) names that Lightspeed applies.
+"""Tonelark edit settings: the Lightroom words the AI models know, and the
+Camera Raw (crs) names that Tonelark applies.
 
 Friendly settings (what a model or a chat writes):
 
@@ -57,7 +57,7 @@ def clamp(v, lo, hi):
 
 
 def friendly(crs):
-    """current settings (Camera Raw names, from Lightspeed) -> friendly"""
+    """current settings (Camera Raw names, from Tonelark) -> friendly"""
     out = {}
     for name, key, lo, hi, digits in BASIC:
         out[name] = round(_num(crs.get(key)), digits)
@@ -115,7 +115,7 @@ def _zone(name):
 
 def to_crs(settings, current=None):
     """friendly settings (only the given ones) -> Camera Raw names and values
-    for Lightspeed; current: the current settings (Camera Raw names)"""
+    for Tonelark; current: the current settings (Camera Raw names)"""
     current = current or {}
     if not isinstance(settings, dict):
         return {}
@@ -132,7 +132,7 @@ def to_crs(settings, current=None):
         crs['WhiteBalance'] = 'Custom'
         crs['Temperature'] = round(t)
         crs['Tint'] = round(ti)
-        # images that are not raw: Lightspeed reads these
+        # images that are not raw: Tonelark reads these
         crs['IncrementalTemperature'] = round(100.0 * math.log2(t / 5003.0), 2)
         crs['IncrementalTint'] = round(ti)
     hsl = lower.get('hsl')
@@ -181,7 +181,7 @@ def inner_scale(width, height, angle):
 
 
 def crop_edit(width, height, rect, aspect='original', current=None, angle=None):
-    """crop settings for Lightspeed.
+    """crop settings for Tonelark.
 
     rect: left, top, right, bottom in 0..1 of the photo as shown now (which
     may be cropped and straightened already: current = dict(CropLeft, CropTop,
@@ -201,7 +201,7 @@ def crop_edit(width, height, rect, aspect='original', current=None, angle=None):
     L, T = l0 + l * (r0 - l0), t0 + t * (b0 - t0)
     R, B = l0 + r * (r0 - l0), t0 + b * (b0 - t0)
     a1 = a0
-    # Lightspeed's rotation is counterclockwise for positive values
+    # Tonelark's rotation is counterclockwise for positive values
     if angle is not None:
         a1 = clamp(a0 - _num(angle), -15.0, 15.0)
     if abs(a1 - a0) > 1e-3:

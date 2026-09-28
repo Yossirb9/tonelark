@@ -1131,9 +1131,9 @@ endif(WIN32)
 
 install(TARGETS darktable DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)
 if(WIN32)
-  # Lightspeed: the same launcher under the product name, used by the installer
+  # Tonelark: the same launcher under the product name, used by the installer
   install(PROGRAMS $<TARGET_FILE:darktable> DESTINATION ${CMAKE_INSTALL_BINDIR}
-          RENAME Lightspeed.exe COMPONENT DTApplication)
+          RENAME Tonelark.exe COMPONENT DTApplication)
 endif(WIN32)
 
 InstallDependencyFiles()

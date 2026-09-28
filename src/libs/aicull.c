@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -51,7 +51,7 @@
 DT_MODULE(1)
 
 #define DT_PICK_TAG "darktable|pick"
-#define AI_MATCH_TAG "lightspeed|ai match"
+#define AI_MATCH_TAG "tonelark|ai match"
 #define NOTES_KEY "Xmp.acdsee.notes"
 
 typedef struct dt_lib_aicull_t
@@ -189,7 +189,7 @@ static void _apply_cull(_job_t *j)
         if(j->stack && dt_is_valid_imgid(best)) dt_grouping_add_to_group(best, id);
       }
     }
-    gchar *note = g_strdup_printf(_("Lightspeed quality %d%%%s%s"),
+    gchar *note = g_strdup_printf(_("Tonelark quality %d%%%s%s"),
                                   (int)(json_object_get_double_member(o, "score") * 100.0),
                                   *json_object_get_string_member_with_default(o, "note", "") ? ": " : "",
                                   json_object_get_string_member_with_default(o, "note", ""));

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>המדריך של Lightspeed</title>
+<title>המדריך של Tonelark</title>
 <style>
   :root {
     --bg: #1e1e1e; --panel: #282828; --line: #3a3a3a;
@@ -40,7 +40,7 @@
 </head>
 <body>
 <header><div>
-  <h1>Lightspeed</h1>
+  <h1>Tonelark</h1>
   <p>עורך תמונות בסגנון Lightroom, על המנוע של darktable. המדריך הזה מכסה את מה שצריך כדי לעבוד.</p>
 </div></header>
 <main>
@@ -61,22 +61,22 @@
 <h2 id="install">1. התקנה ומחשבים נוספים</h2>
 <p>יש שתי גרסאות, ושתיהן זהות:</p>
 <ul>
-  <li><b>מתקין</b> (<span class="ltr">Lightspeed-…-setup.exe</span>): יוצר קיצור דרך בתפריט התחל ובשולחן העבודה, ומוסיף "ייבוא ל-Lightspeed" בלחיצה ימנית על תיקייה או תמונה. בזמן ההתקנה אפשר לבחור התקנה לכל המשתמשים או רק למשתמש הנוכחי (בלי הרשאות מנהל).</li>
-  <li><b>גרסה ניידת</b> (<span class="ltr">…-portable.zip</span>): מחלצים לכל תיקייה, גם לדיסק און קי, ומריצים את <code>Lightspeed\bin\Lightspeed.exe</code>.</li>
+  <li><b>מתקין</b> (<span class="ltr">Tonelark-…-setup.exe</span>): יוצר קיצור דרך בתפריט התחל ובשולחן העבודה, ומוסיף "ייבוא ל-Tonelark" בלחיצה ימנית על תיקייה או תמונה. בזמן ההתקנה אפשר לבחור התקנה לכל המשתמשים או רק למשתמש הנוכחי (בלי הרשאות מנהל).</li>
+  <li><b>גרסה ניידת</b> (<span class="ltr">…-portable.zip</span>): מחלצים לכל תיקייה, גם לדיסק און קי, ומריצים את <code>Tonelark\bin\Tonelark.exe</code>.</li>
 </ul>
 <p>התוכנה לא נבנתה למעבד מסוים, ולכן היא רצה על כל מחשב Windows 10/11 של 64 ביט. במחשב חזק יותר היא מנצלת אוטומטית את כל ליבות המעבד ואת כרטיס המסך (ראו <a href="#performance">ביצועים</a>).</p>
 
 <h2 id="lightroom">2. פתיחת קטלוג Lightroom</h2>
 <p>הפרויקטים הקיימים שלך עוברים כמו שהם, והקבצים המקוריים לא משתנים. יש שתי דרכים:</p>
 <ol>
-  <li>לחיצה כפולה על קובץ ה-<code>.lrcat</code> (אם בזמן ההתקנה נבחרה האפשרות לפתוח קטלוגים של Lightroom), או לחיצה ימנית ואז "פתח באמצעות" ו-Lightspeed.</li>
+  <li>לחיצה כפולה על קובץ ה-<code>.lrcat</code> (אם בזמן ההתקנה נבחרה האפשרות לפתוח קטלוגים של Lightroom), או לחיצה ימנית ואז "פתח באמצעות" ו-Tonelark.</li>
   <li>בתוך התוכנה: <b>Library</b>, אחר כך הפאנל <b>Import</b> משמאל, ואז הכפתור <b>Lightroom catalog...</b>. בוחרים את הקטלוג ומסמנים מה לייבא.</li>
 </ol>
 <p>מה עובר מהקטלוג:</p>
 <table>
   <tr><th>ארגון</th><td>התיקיות, הדירוג בכוכבים, דגלי Pick ו-Reject, תוויות הצבע, מילות המפתח (כולל ההיררכיה), ה-Collections, ה-Virtual Copies וה-Stacks, וגם כותרת, תיאור, יוצר, זכויות יוצרים ו-GPS.</td></tr>
   <tr><th>עריכה</th><td>חיתוך וזווית, סיבוב, White Balance, ‏Exposure, ‏Contrast, ‏Highlights, ‏Shadows, ‏Whites, ‏Blacks, ‏Texture, ‏Clarity, ‏Dehaze, ‏Vibrance, ‏Saturation, ‏Tone Curve, ‏HSL, ‏Color Grading / Split Toning, שחור-לבן, Vignette, ‏Grain, חידוד, הפחתת רעש, תיקון עדשה ו-CA, והסרת כתמים (Spot Removal).</td></tr>
-  <tr><th>לא עובר</th><td>התאמות מקומיות (מברשות, מסננים הדרגתיים ומסכות AI), פרופילי צבע של Adobe ותיקוני Upright. את אלה עושים מחדש עם הכלים המקבילים ב-Lightspeed.</td></tr>
+  <tr><th>לא עובר</th><td>התאמות מקומיות (מברשות, מסננים הדרגתיים ומסכות AI), פרופילי צבע של Adobe ותיקוני Upright. את אלה עושים מחדש עם הכלים המקבילים ב-Tonelark.</td></tr>
 </table>
 <p class="note">הקטלוג עצמו נפתח לקריאה בלבד ולא משתנה, כך שאפשר להמשיך לפתוח אותו גם ב-Lightroom. אם התמונות הועברו לכונן אחר, הכלי שואל איפה הן נמצאות עכשיו.</p>
 
@@ -108,7 +108,7 @@
   <li>בוחרים פורמט: JPEG, ‏TIFF (8, 16 או 32 ביט), PNG, ‏WebP, ‏AVIF, ‏JPEG XL, ‏HEIF, ‏JPEG 2000, ‏EXR, ‏PDF ועוד. בוחרים גם גודל, איכות ופרופיל צבע (sRGB לרשת, Adobe RGB להדפסה).</li>
   <li>לוחצים <b>start export</b>, או <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>.</li>
 </ol>
-<p>הקבצים נשמרים כברירת מחדל בתיקייה <code>Lightspeed Export</code> שליד התמונות המקוריות. אפשר לשנות את זה בשדה התיקייה בפאנל. נתוני המצלמה (EXIF), הדירוג ומילות המפתח נשמרים בקובץ המיוצא.</p>
+<p>הקבצים נשמרים כברירת מחדל בתיקייה <code>Tonelark Export</code> שליד התמונות המקוריות. אפשר לשנות את זה בשדה התיקייה בפאנל. נתוני המצלמה (EXIF), הדירוג ומילות המפתח נשמרים בקובץ המיוצא.</p>
 
 <h2 id="keys">6. קיצורי מקלדת</h2>
 <p>הקיצורים כבר מוגדרים כמו ב-Lightroom. אפשר לראות ולשנות את כולם בלחיצה על סמל המקלדת שבסרגל העליון.</p>
@@ -138,7 +138,7 @@
 
 <h2 id="data">8. איפה נשמרים הנתונים</h2>
 <ul>
-  <li>הספרייה (הדירוגים והעריכות של כל התמונות) וההגדרות נמצאות ב-<code>%LOCALAPPDATA%\lightspeed</code>. כדאי לגבות את התיקייה הזאת.</li>
+  <li>הספרייה (הדירוגים והעריכות של כל התמונות) וההגדרות נמצאות ב-<code>%LOCALAPPDATA%\tonelark</code>. כדאי לגבות את התיקייה הזאת.</li>
   <li>ליד כל תמונה נשמר גם קובץ <code>.xmp</code> עם העריכה. לכן במחשב אחר מספיק לייבא את תיקיית התמונות, והעריכות מגיעות איתה.</li>
   <li>הסרת התוכנה לא מוחקת את הספרייה ולא את התמונות.</li>
 </ul>
@@ -147,7 +147,7 @@
 <h3>מסכות (כלים מקומיים)</h3>
 <p>המסכות נמצאות בכל כלי: לוחצים בתחתית הכלי על סמל המסכה, או על אחד הכלים בסרגל שמתחת לתמונה.</p>
 <table>
-  <tr><th>Lightroom</th><th>Lightspeed</th></tr>
+  <tr><th>Lightroom</th><th>Tonelark</th></tr>
   <tr><td>Brush</td><td>יש: מברשת עם גודל, קשיות ושקיפות</td></tr>
   <tr><td>Linear Gradient</td><td>יש: מעבר הדרגתי שאפשר גם לעקם</td></tr>
   <tr><td>Radial Gradient</td><td>יש: אליפסה או עיגול עם ריכוך</td></tr>
@@ -191,19 +191,19 @@
   <li><b>Keywords & Captions:</b> מילות מפתח, כותרת ותיאור לכל תמונה, בשפה שבוחרים ב-<i>language</i> (גם עברית). נשלחות 12 תמונות בבקשה. אחר כך מוצאים את התמונות בחיפוש ובמסננים, והנתונים יוצאים עם הקבצים בייצוא.</li>
 </ul>
 
-<h3>עבודה עם Lightspeed מתוך צ'אט (MCP)</h3>
-<p>לוחצים פעם אחת על <b>Connect Chat</b> בפאנל AI assistant. מעכשיו כל צ'אט חדש של Claude Code, ‏Codex או Gemini CLI יכול לעבוד עם Lightspeed הפתוח: לחפש תמונות, לראות אותן (כמה ביחד על דף מגע אחד), לדרג, לסמן Pick או Reject, לתייג, לכתוב כותרות, לערוך בסליידרים, לחתוך, להעתיק עריכה ולייצא. דוגמאות למה אפשר לכתוב בצ'אט:</p>
+<h3>עבודה עם Tonelark מתוך צ'אט (MCP)</h3>
+<p>לוחצים פעם אחת על <b>Connect Chat</b> בפאנל AI assistant. מעכשיו כל צ'אט חדש של Claude Code, ‏Codex או Gemini CLI יכול לעבוד עם Tonelark הפתוח: לחפש תמונות, לראות אותן (כמה ביחד על דף מגע אחד), לדרג, לסמן Pick או Reject, לתייג, לכתוב כותרות, לערוך בסליידרים, לחתוך, להעתיק עריכה ולייצא. דוגמאות למה אפשר לכתוב בצ'אט:</p>
 <ul>
   <li>"תעבור על התמונות מהיום, תן 5 כוכבים לשלוש הכי טובות ו-Reject למטושטשות"</li>
   <li>"תעשה את כל התמונות עם הכלה חמות יותר ב-300K ותוריד קצת את ההיילייטים"</li>
   <li>"תחתוך את התמונה הפתוחה ל-4:5 לאינסטגרם ותייצא אותה לשולחן העבודה"</li>
 </ul>
-<p>אם Lightspeed סגור, הצ'אט יכול להפעיל אותו. כדי לנתק: <code>claude mcp remove -s user lightspeed</code> או <code>codex mcp remove lightspeed</code>.</p>
+<p>אם Tonelark סגור, הצ'אט יכול להפעיל אותו. כדי לנתק: <code>claude mcp remove -s user tonelark</code> או <code>codex mcp remove tonelark</code>.</p>
 
 <p class="note">פרטיות: Find Best Shots, ‏Best Take ו-Match Look (בלי fine-tune) לא שולחים שום דבר החוצה. בשאר כלי ה-AI נשלחים עותקים מוקטנים של התמונות לשירות שבחרת, תחת החשבון שלך.</p>
 
-<p style="color:var(--dim);margin-top:40px">Lightspeed נמצא בשלב בטא. Lightspeed מבוסס על darktable, בקוד פתוח ברישיון GPL v3. קוד המקור של darktable זמין ב-<span class="ltr">github.com/darktable-org/darktable</span>. רשימת הרכיבים הנוספים ורישיונותיהם נמצאת בקובץ <code>THIRD_PARTY_NOTICES.txt</code> בתיקיית ההתקנה.</p>
-<p style="color:var(--dim)">Lightspeed אינו קשור ל-Adobe, ו-Adobe לא אישרה או מממנת אותו. ‏Adobe ו-Lightroom הם סימנים מסחריים של Adobe Inc., והשמות מופיעים כאן רק כדי לתאר תאימות.</p>
+<p style="color:var(--dim);margin-top:40px">Tonelark נמצא בשלב בטא. Tonelark מבוסס על darktable, בקוד פתוח ברישיון GPL v3. קוד המקור של darktable זמין ב-<span class="ltr">github.com/darktable-org/darktable</span>. רשימת הרכיבים הנוספים ורישיונותיהם נמצאת בקובץ <code>THIRD_PARTY_NOTICES.txt</code> בתיקיית ההתקנה.</p>
+<p style="color:var(--dim)">Tonelark אינו קשור ל-Adobe, ו-Adobe לא אישרה או מממנת אותו. ‏Adobe ו-Lightroom הם סימנים מסחריים של Adobe Inc., והשמות מופיעים כאן רק כדי לתאר תאימות.</p>
 </main>
 </body>
 </html>

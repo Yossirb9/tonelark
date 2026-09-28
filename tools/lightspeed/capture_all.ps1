@@ -1,5 +1,5 @@
 # Capture every visible top-level window of a process (dialogs included) into PNGs: <OutPrefix>_<n>.png
-param([string]$OutPrefix = "C:\lightspeed\qa\win", [string]$ProcName = "Lightspeed")
+param([string]$OutPrefix = "C:\lightspeed\qa\win", [string]$ProcName = "Tonelark")
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;

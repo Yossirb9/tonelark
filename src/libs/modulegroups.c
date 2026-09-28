@@ -39,8 +39,8 @@
 DT_MODULE(1)
 
 // the T_ macros are for the translation engine to take them into account
-#define FALLBACK_PRESET_NAME     "Lightspeed"
-#define T_FALLBACK_PRESET_NAME _("Lightspeed")
+#define FALLBACK_PRESET_NAME     "Tonelark"
+#define T_FALLBACK_PRESET_NAME _("Tonelark")
 
 #define DEPRECATED_PRESET_NAME     "modules: deprecated"
 #define T_DEPRECATED_PRESET_NAME _("modules: deprecated")
@@ -1797,7 +1797,7 @@ void init_presets(dt_lib_module_t *self)
   dt_lib_presets_add(_("workflow: scene-referred"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
 
-  // Lightspeed: the Lightroom develop panels first (tone curve, HSL,
+  // Tonelark: the Lightroom develop panels first (tone curve, HSL,
   // color grading, detail, lens corrections, transform, effects,
   // calibration, healing), then every darktable tool grouped by task.
   // The basic panel (sliders) sits above the modules, so no quick access.
@@ -1899,7 +1899,7 @@ void init_presets(dt_lib_module_t *self)
   AM("rasterfile");
   AM("scalepixels");
 
-  dt_lib_presets_add(_("Lightspeed"),
+  dt_lib_presets_add(_("Tonelark"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
 
   // search only (only active modules visible)
@@ -1929,9 +1929,9 @@ void init_presets(dt_lib_module_t *self)
 
   g_free(tx);
 
-  // new configuration: start with the Lightspeed layout
+  // new configuration: start with the Tonelark layout
   if(!dt_conf_key_exists("plugins/darkroom/modulegroups_preset"))
-    dt_conf_set_string("plugins/darkroom/modulegroups_preset", _("Lightspeed"));
+    dt_conf_set_string("plugins/darkroom/modulegroups_preset", _("Tonelark"));
 
   // if needed, we add a new preset, based on last user config
   if(!dt_conf_key_exists("plugins/darkroom/modulegroups_preset"))

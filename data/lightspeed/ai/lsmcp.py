@@ -1,12 +1,12 @@
-"""Lightspeed MCP server: lets a Claude Code, Codex or Gemini CLI chat work
-with the photos of the running Lightspeed.
+"""Tonelark MCP server: lets a Claude Code, Codex or Gemini CLI chat work
+with the photos of the running Tonelark.
 
-    claude mcp add -s user lightspeed -- <python> <this file>
-    codex mcp add lightspeed -- <python> <this file>
+    claude mcp add -s user tonelark -- <python> <this file>
+    codex mcp add tonelark -- <python> <this file>
 
-(Lightspeed does it with "Connect Chat" in the AI assistant panel.)
+(Tonelark does it with "Connect Chat" in the AI assistant panel.)
 
-It talks to Lightspeed through request files: <config dir>/mcp/in/<id>.json,
+It talks to Tonelark through request files: <config dir>/mcp/in/<id>.json,
 answered in <config dir>/mcp/out/<id>.json (see src/common/lightspeed_bridge.c).
 MCP over stdio: one JSON-RPC message per line.
 """
@@ -22,27 +22,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import lsedit  # noqa: E402
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 PROTOCOL = '2025-06-18'
 
 
 def config_dir():
-    d = os.environ.get('LIGHTSPEED_CONFIGDIR')
+    d = os.environ.get('TONELARK_CONFIGDIR') or os.environ.get('LIGHTSPEED_CONFIGDIR')
     if d:
         return d
     if os.name == 'nt':
-        return os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'lightspeed')
-    return os.path.join(os.environ.get('XDG_CONFIG_HOME', os.path.join(os.path.expanduser('~'), '.config')),
-                        'lightspeed')
+        base = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+    else:
+        base = os.environ.get('XDG_CONFIG_HOME', os.path.join(os.path.expanduser('~'), '.config'))
+    new, old = os.path.join(base, 'tonelark'), os.path.join(base, 'lightspeed')
+    # the first versions were called Lightspeed
+    return new if os.path.isdir(new) or not os.path.isdir(old) else old
 
 
-class LightspeedError(Exception):
+class TonelarkError(Exception):
     pass
 
 
 def _alive():
     try:
-        with open(os.path.join(config_dir(), 'mcp', 'lightspeed.json'), encoding='utf-8') as f:
+        with open(os.path.join(config_dir(), 'mcp', 'tonelark.json'), encoding='utf-8') as f:
             beat = json.load(f)
     except (OSError, ValueError):
         return None
@@ -50,9 +53,9 @@ def _alive():
 
 
 def call(cmd, args=None, timeout=60):
-    """one request to the running Lightspeed"""
+    """one request to the running Tonelark"""
     if not _alive():
-        raise LightspeedError('Lightspeed is not running. Start it, or call start_lightspeed.')
+        raise TonelarkError('Tonelark is not running. Start it, or call start_tonelark.')
     base = os.path.join(config_dir(), 'mcp')
     rid = uuid.uuid4().hex
     req = os.path.join(base, 'in', rid + '.json')
@@ -74,14 +77,14 @@ def call(cmd, args=None, timeout=60):
             except OSError:
                 pass
             if not answer.get('ok'):
-                raise LightspeedError(answer.get('error') or 'Lightspeed could not do it')
+                raise TonelarkError(answer.get('error') or 'Tonelark could not do it')
             return answer.get('result') or {}
         time.sleep(0.1)
     try:
         os.remove(req)
     except OSError:
         pass
-    raise LightspeedError('Lightspeed did not answer in %d s' % timeout)
+    raise TonelarkError('Tonelark did not answer in %d s' % timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +103,9 @@ AI_TOOLS = {
 }
 
 TOOLS = [
-    dict(name='lightspeed_status', description='Is Lightspeed running, which view is open (lighttable = library, darkroom = develop), which photo is open, how many photos are in the current collection and which are selected.',
+    dict(name='tonelark_status', description='Is Tonelark running, which view is open (lighttable = library, darkroom = develop), which photo is open, how many photos are in the current collection and which are selected.',
          inputSchema={'type': 'object', 'properties': {}}),
-    dict(name='start_lightspeed', description='Start Lightspeed when it is not running.',
+    dict(name='start_tonelark', description='Start Tonelark when it is not running.',
          inputSchema={'type': 'object', 'properties': {}}),
     dict(name='list_photos', description='List photos with their id, file, folder, date, camera settings, stars, pick/reject flag, color labels, keywords, title, caption and AI notes. Filters are optional.',
          inputSchema={'type': 'object', 'properties': {
@@ -128,7 +131,7 @@ TOOLS = [
          inputSchema={'type': 'object', 'properties': {'ids': IDS, 'add': {'type': 'array', 'items': {'type': 'string'}}, 'remove': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['ids']}),
     dict(name='describe_photos', description='Set the title and/or caption of photos.',
          inputSchema={'type': 'object', 'properties': {'ids': IDS, 'title': {'type': 'string'}, 'caption': {'type': 'string'}}, 'required': ['ids']}),
-    dict(name='select_photos', description='Select photos in Lightspeed (so the user sees them, or for run_ai_tool).',
+    dict(name='select_photos', description='Select photos in Tonelark (so the user sees them, or for run_ai_tool).',
          inputSchema={'type': 'object', 'properties': {'ids': IDS}, 'required': ['ids']}),
     dict(name='open_photo', description='Open a photo in the Develop (darkroom) view.',
          inputSchema={'type': 'object', 'properties': {'id': {'type': 'integer'}}, 'required': ['id']}),
@@ -145,18 +148,18 @@ TOOLS = [
          inputSchema={'type': 'object', 'properties': {'from_id': {'type': 'integer'}, 'to_ids': IDS}, 'required': ['from_id', 'to_ids']}),
     dict(name='export_photos', description='Export photos as JPEG files with their edits.',
          inputSchema={'type': 'object', 'properties': {'ids': IDS, 'folder': {'type': 'string', 'description': 'absolute folder path'}, 'max_size': {'type': 'integer', 'description': 'longest side in pixels, 0 = full size', 'default': 0}, 'quality': {'type': 'integer', 'default': 92}}, 'required': ['ids', 'folder']}),
-    dict(name='run_ai_tool', description='Run one of the AI tools of Lightspeed on photos (they work on contact sheets, cheaply, and the results appear in Lightspeed: stars, flags, notes, edits, keywords). find_best_shots works on this computer without AI. Check the results later with list_photos.',
+    dict(name='run_ai_tool', description='Run one of the AI tools of Tonelark on photos (they work on contact sheets, cheaply, and the results appear in Tonelark: stars, flags, notes, edits, keywords). find_best_shots works on this computer without AI. Check the results later with list_photos.',
          inputSchema={'type': 'object', 'properties': {'tool': {'type': 'string', 'enum': sorted(AI_TOOLS)}, 'ids': IDS, 'instruction': {'type': 'string', 'description': 'for auto_edit: the look to make'}}, 'required': ['tool', 'ids']}),
 ]
 
 # what each tool does, for the approval prompts of the chat tools
-READ_ONLY = {'lightspeed_status', 'list_photos', 'get_photo', 'view_photos'}
+READ_ONLY = {'tonelark_status', 'list_photos', 'get_photo', 'view_photos'}
 for _t in TOOLS:
     _ro = _t['name'] in READ_ONLY
     _t['annotations'] = dict(readOnlyHint=_ro, destructiveHint=False, openWorldHint=False,
-                             idempotentHint=_ro or _t['name'] not in ('run_ai_tool', 'export_photos', 'start_lightspeed'))
+                             idempotentHint=_ro or _t['name'] not in ('run_ai_tool', 'export_photos', 'start_tonelark'))
 
-INSTRUCTIONS = """Lightspeed is the photo editor (a Lightroom replacement) running on this computer. Photos have integer ids: find them with list_photos. To look at photos use view_photos: several ids at once give one numbered contact sheet, which is much cheaper. Edits are non-destructive Lightroom-style sliders (edit_photos, crop_photo, copy_edit); the user can see and undo them in Lightspeed. Ratings, flags, labels, keywords and captions work like in Lightroom."""
+INSTRUCTIONS = """Tonelark is the photo editor (a Lightroom replacement) running on this computer. Photos have integer ids: find them with list_photos. To look at photos use view_photos: several ids at once give one numbered contact sheet, which is much cheaper. Edits are non-destructive Lightroom-style sliders (edit_photos, crop_photo, copy_edit); the user can see and undo them in Tonelark. Ratings, flags, labels, keywords and captions work like in Lightroom."""
 
 
 def _text(obj):
@@ -176,13 +179,13 @@ def _current(pid):
 def tool_view(a):
     ids = [int(i) for i in a.get('ids') or []][:12]
     if not ids:
-        raise LightspeedError('give photo ids')
+        raise TonelarkError('give photo ids')
     single = len(ids) == 1
     size = max(256, min(2048, int(a.get('size', 1024)))) if single else 520
     res = call('preview', dict(ids=ids, size=size), 180)
     files = [p for p in res.get('previews', []) if p.get('path')]
     if not files:
-        raise LightspeedError('no preview could be made')
+        raise TonelarkError('no preview could be made')
     try:
         if single:
             return [_image(files[0]['path'])] + _text('photo id %d' % files[0]['id'])
@@ -210,7 +213,7 @@ def tool_edit(a):
         current = _current(ids[0]).get('edit', {})
     crs = lsedit.to_crs(settings, current)
     if not crs:
-        raise LightspeedError('no known setting in ' + json.dumps(settings) + '. Settings: ' + lsedit.VOCABULARY)
+        raise TonelarkError('no known setting in ' + json.dumps(settings) + '. Settings: ' + lsedit.VOCABULARY)
     res = call('edit', dict(ids=ids, edit=crs), 60 + 20 * len(ids))
     res['applied'] = crs
     return _text(res)
@@ -230,9 +233,9 @@ def tool_crop(a):
 
 def tool_start(a):
     if _alive():
-        return _text('Lightspeed is running')
+        return _text('Tonelark is running')
     prefix = os.path.normpath(os.path.join(HERE, '..', '..', '..', '..'))
-    for name in ('lightspeed.exe', 'Lightspeed.exe', 'darktable.exe', 'lightspeed', 'darktable'):
+    for name in ('Tonelark.exe', 'tonelark.exe', 'darktable.exe', 'tonelark', 'darktable'):
         exe = os.path.join(prefix, 'bin', name)
         if os.path.exists(exe):
             flags = 0
@@ -243,16 +246,16 @@ def tool_start(a):
             for _ in range(120):
                 time.sleep(1)
                 if _alive():
-                    return _text('Lightspeed started')
-            return _text('Lightspeed is starting, try again in a moment')
-    raise LightspeedError('Lightspeed was not found next to the MCP server')
+                    return _text('Tonelark started')
+            return _text('Tonelark is starting, try again in a moment')
+    raise TonelarkError('Tonelark was not found next to the MCP server')
 
 
 def run_tool(name, a):
     ids = a.get('ids')
-    if name == 'lightspeed_status':
+    if name == 'tonelark_status':
         return _text(call('status', {}, 20))
-    if name == 'start_lightspeed':
+    if name == 'start_tonelark':
         return tool_start(a)
     if name == 'list_photos':
         keys = ('scope', 'search', 'min_stars', 'label', 'flag', 'edited', 'limit', 'offset')
@@ -293,12 +296,12 @@ def run_tool(name, a):
     if name == 'run_ai_tool':
         tool = AI_TOOLS.get(a.get('tool'))
         if not tool:
-            raise LightspeedError('unknown tool, one of: ' + ', '.join(sorted(AI_TOOLS)))
+            raise TonelarkError('unknown tool, one of: ' + ', '.join(sorted(AI_TOOLS)))
         args = dict(action=tool, ids=ids or [])
         if a.get('instruction'):
             args['text'] = a['instruction']
         return _text(call('action', args, 30))
-    raise LightspeedError('unknown tool ' + name)
+    raise TonelarkError('unknown tool ' + name)
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +317,7 @@ def handle(msg):
     if method == 'initialize':
         asked = (msg.get('params') or {}).get('protocolVersion') or PROTOCOL
         return dict(protocolVersion=asked, capabilities=dict(tools=dict(listChanged=False)),
-                    serverInfo=dict(name='lightspeed', version=VERSION), instructions=INSTRUCTIONS)
+                    serverInfo=dict(name='tonelark', version=VERSION), instructions=INSTRUCTIONS)
     if method == 'ping':
         return {}
     if method == 'tools/list':
@@ -323,7 +326,7 @@ def handle(msg):
         p = msg.get('params') or {}
         try:
             return dict(content=run_tool(p.get('name'), p.get('arguments') or {}), isError=False)
-        except LightspeedError as e:
+        except TonelarkError as e:
             return dict(content=_text(str(e)), isError=True)
         except Exception as e:     # noqa: BLE001
             return dict(content=_text('%s: %s' % (type(e).__name__, e)), isError=True)

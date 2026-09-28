@@ -1,16 +1,16 @@
-# Lightspeed — darktable fork with a Lightroom-style UI
+# Tonelark — darktable fork with a Lightroom-style UI
 
 Base: darktable release-5.6.1 (C:\lightspeed\darktable). Engine untouched; changes are UI/UX, import, defaults, branding.
 Build: MSYS2 UCRT64 (C:\msys64), BINARY_PACKAGE_BUILD=ON (portable across CPUs), OpenMP + OpenCL (runtime-loaded).
 
 ## Work items
 1. [x] Build toolchain + deps (pacman), first clean build of upstream
-2. [x] Branding: "Lightspeed" name in title/about/splash/installer; separate config dir (%LOCALAPPDATA%\lightspeed)
+2. [x] Branding: "Tonelark" name in title/about/splash/installer; separate config dir (%LOCALAPPDATA%\lightspeed)
 3. [x] Lightroom-like theme (lightspeed.css) as default
 4. [x] View names: Library / Develop / Map / Slideshow / Print / Tethering
 5. [x] Develop: "Basic" panel (proxy lib: Temp, Tint, Exposure, Contrast, Highlights, Shadows, Whites, Blacks,
        Texture, Clarity, Dehaze, Vibrance, Saturation) mapped onto darktable modules
-6. [x] Develop: module group preset "Lightspeed" ordered like LR panels (Tone Curve, HSL, Color Grading, Detail,
+6. [x] Develop: module group preset "Tonelark" ordered like LR panels (Tone Curve, HSL, Color Grading, Detail,
        Lens Corrections, Transform, Effects, Calibration) + extra groups for all darktable modules
 7. [x] Lightroom keyboard shortcuts (shortcutsrc.lightroom applied on first run)
 8. [x] Before/after "\" toggle

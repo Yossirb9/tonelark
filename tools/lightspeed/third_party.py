@@ -80,13 +80,13 @@ def main():
             shutil.copytree(src, os.path.join(licdir, name), dirs_exist_ok=True)
 
     with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
-        f.write('# Third party software in Lightspeed for Windows\n\n'
-                'Lightspeed is free software under the GNU General Public License v3 (LICENSE). '
+        f.write('# Third party software in Tonelark for Windows\n\n'
+                'Tonelark is free software under the GNU General Public License v3 (LICENSE). '
                 'It is a fork of darktable (https://www.darktable.org, GPL v3) and contains the '
                 'software below, each under its own license. The license texts are in '
                 '`share/licenses`, and the source code of every package is available from its '
                 'project page and from MSYS2 (https://packages.msys2.org).\n\n'
-                'Lightspeed is not affiliated with, endorsed by or sponsored by Adobe. Adobe and '
+                'Tonelark is not affiliated with, endorsed by or sponsored by Adobe. Adobe and '
                 'Lightroom are trademarks of Adobe Inc., used here only to describe compatibility.\n\n'
                 '## Libraries (MSYS2 UCRT64 packages)\n\n'
                 '| Package | Version | License | Project |\n|---|---|---|---|\n')

@@ -1136,7 +1136,7 @@ static inline float round5(const double x)
 }
 
 // ---------------------------------------------------------------------------
-// Lightspeed: Lightroom develop settings mapped onto current darktable modules
+// Tonelark: Lightroom develop settings mapped onto current darktable modules
 // ---------------------------------------------------------------------------
 
 int dt_lightroom_color_label(const char *label)

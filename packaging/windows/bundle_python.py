@@ -1,4 +1,4 @@
-"""Add the Python runtime of the Lightspeed AI helper to an install tree.
+"""Add the Python runtime of the Tonelark AI helper to an install tree.
 
     python packaging/windows/bundle_python.py [--install C:/lightspeed/install]
 

@@ -710,7 +710,7 @@ int guided_filter_cl(int devid,
   assert(ch >= 3);
   assert(w >= 1);
 
-  // Lightspeed: the OpenCL implementation gives wrong values in the last
+  // Tonelark: the OpenCL implementation gives wrong values in the last
   // 2*w+1 rows on some drivers (Intel Xe: transmission of haze removal out of
   // range, garbage at the bottom of downscaled exports), the CPU code is
   // correct. The data is copied to the host and back, well under a second.

@@ -86,7 +86,7 @@ static GtkWidget *_get_program_name()
     g_object_unref(prog_name_image);
   }
   else
-    program_name = GTK_WIDGET(gtk_label_new("Lightspeed"));
+    program_name = GTK_WIDGET(gtk_label_new("Tonelark"));
 
   gtk_widget_set_name(program_name, "splashscreen-program");
   return program_name;
@@ -120,7 +120,7 @@ void dt_splash_screen_create(const gboolean force)
   gtk_widget_set_name(darktable.splash.progress_text, "splashscreen-progress");
   darktable.splash.remaining_text = gtk_label_new("");
   gtk_widget_set_name(darktable.splash.remaining_text, "splashscreen-remaining");
-  // Lightspeed's version, darktable's is in the about dialog
+  // Tonelark's version, darktable's is in the about dialog
   gchar *version_str = g_strdup(LIGHTSPEED_VERSION_LABEL);
   GtkWidget *version = GTK_WIDGET(gtk_label_new(version_str));
   g_free(version_str);

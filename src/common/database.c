@@ -3942,10 +3942,11 @@ static gboolean pid_is_alive(int pid)
     long unsigned int n_filename = sizeof(wfilename);
     int ret = QueryFullProcessImageNameW(h, 0, wfilename, &n_filename);
     char *filename = g_utf16_to_utf8(wfilename, -1, NULL, NULL, NULL);
-    // the Lightspeed installer ships the application as Lightspeed.exe
+    // the Tonelark installer ships the application as Tonelark.exe
     char *lower = filename ? g_ascii_strdown(filename, -1) : NULL;
     if(ret && n_filename > 0 && lower
-       && (g_str_has_suffix(lower, "darktable.exe") || g_str_has_suffix(lower, "lightspeed.exe")))
+       && (g_str_has_suffix(lower, "darktable.exe") || g_str_has_suffix(lower, "tonelark.exe")
+           || g_str_has_suffix(lower, "lightspeed.exe")))
       pid_is_alive = TRUE;
     g_free(lower);
     g_free(filename);

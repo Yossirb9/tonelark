@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@
                       optionally fine-tuned by the AI
     Suggest Crops     crop (any or a given aspect ratio) and straighten
     Keywords & Captions  keywords, title and caption, 12 photos per request
-    Connect Chat      Claude Code / Codex / Gemini chats get the Lightspeed tools
+    Connect Chat      Claude Code / Codex / Gemini chats get the Tonelark tools
 */
 
 #include "bauhaus/bauhaus.h"
@@ -415,7 +415,7 @@ static void _chat(_job_t *j, dt_job_t *job, GError **error)
                            !g_strcmp0(state, "connected") ? _("connected")
                            : !g_strcmp0(state, "not installed") ? _("not installed") : state);
   }
-  j->message = ok ? g_strdup_printf(_("chats can now work with Lightspeed (open a new chat)\n%s"), msg->str)
+  j->message = ok ? g_strdup_printf(_("chats can now work with Tonelark (open a new chat)\n%s"), msg->str)
                   : g_strdup_printf(_("no AI tool could be connected\n%s"), msg->str);
   g_string_free(msg, TRUE);
   json_object_unref(res);
@@ -708,7 +708,7 @@ void gui_init(dt_lib_module_t *self)
 
   GtkWidget *chat = dt_action_button_new(self, N_("Connect Chat"), _chat_clicked, self,
                                          _("lets your Claude Code, Codex or Gemini chats see and edit the"
-                                           " photos of Lightspeed (\"rate the sharpest photos of today\","
+                                           " photos of Tonelark (\"rate the sharpest photos of today\","
                                            " \"make these warmer\")"), 0, 0);
 
   d->status = gtk_label_new("");

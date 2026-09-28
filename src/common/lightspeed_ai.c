@@ -1,6 +1,6 @@
 /*
-    This file is part of Lightspeed, a darktable fork.
-    Copyright (C) 2026 Lightspeed developers.
+    This file is part of Tonelark, a darktable fork.
+    Copyright (C) 2026 Tonelark developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -153,7 +153,7 @@ static gboolean _spawn_wait(gchar **argv, const char *log, dt_job_t *job, GError
   si.hStdError = hlog;
   PROCESS_INFORMATION pi = { 0 };
   // the helper and the AI tools it starts live in a job object: cancelling,
-  // or closing Lightspeed, stops all of them
+  // or closing Tonelark, stops all of them
   HANDLE hjob = CreateJobObjectW(NULL, NULL);
   if(hjob)
   {
@@ -237,7 +237,7 @@ JsonObject *dt_lsai_run(const char *command, JsonObject *request, dt_job_t *job,
   if(!python || !g_file_test(script, G_FILE_TEST_EXISTS))
   {
     g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_NOENT,
-                _("the AI helper is missing, reinstall Lightspeed"));
+                _("the AI helper is missing, reinstall Tonelark"));
     g_free(python);
     g_free(script);
     return NULL;

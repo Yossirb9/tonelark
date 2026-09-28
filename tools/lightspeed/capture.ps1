@@ -1,4 +1,4 @@
-# Capture the darktable/Lightspeed main window (by process name) into a PNG, using PrintWindow.
+# Capture the darktable/Tonelark main window (by process name) into a PNG, using PrintWindow.
 param([string]$Out = "C:\lightspeed\qa\shot.png", [string]$ProcName = "darktable", [double]$Scale = 1.0)
 Add-Type -AssemblyName System.Drawing
 Add-Type @"

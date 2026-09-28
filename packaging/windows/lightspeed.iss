@@ -1,4 +1,4 @@
-﻿; Lightspeed installer (Inno Setup 6), based on darktable.iss.in.
+﻿; Tonelark installer (Inno Setup 6), based on darktable.iss.in.
 ; Build it with packaging\windows\make_installer.py, which generates the
 ; file associations include and passes the install tree:
 ;   ISCC.exe /DSourceTree=C:\lightspeed\install lightspeed.iss
@@ -19,15 +19,15 @@
   #define GphotoPortVersion "0.12.2"
 #endif
 
-#define MyAppName "Lightspeed"
+#define MyAppName "Tonelark"
 #define CurrentYear GetDateTimeString('yyyy', '', '')
-#define MyAppCopyright "Copyright (C) 2009-" + CurrentYear + " darktable developers, Lightspeed developers"
-#define MyAppPublisher "Lightspeed"
-#define MyAppExeName "Lightspeed.exe"
+#define MyAppCopyright "Copyright (C) 2009-" + CurrentYear + " darktable developers, Tonelark developers"
+#define MyAppPublisher "Tonelark"
+#define MyAppExeName "Tonelark.exe"
 #define MyAppCliExeName "darktable-cli.exe"
 
 [Setup]
-AppId=Lightspeed
+AppId=Tonelark
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -38,7 +38,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 SourceDir={#SourceTree}
 OutputDir={#SourcePath}\..\..\..\dist
-OutputBaseFilename=Lightspeed-{#MyAppVersion}-win64-setup
+OutputBaseFilename=Tonelark-{#MyAppVersion}-win64-setup
 UninstallDisplayIcon={app}\bin\{#MyAppExeName}
 SetupIconFile={#SourcePath}\..\..\data\pixmaps\dt_logo_128x128.ico
 WizardSmallImageFile={#SourcePath}\..\..\data\pixmaps\256x256\darktable.png
@@ -57,7 +57,7 @@ LZMANumBlockThreads=4
 WizardStyle=modern
 UsedUserAreasWarning=no
 CloseApplications=yes
-; the photos library and settings live in %LOCALAPPDATA%\lightspeed and are
+; the photos library and settings live in %LOCALAPPDATA%\tonelark and are
 ; never touched by the installer or the uninstaller
 
 [Languages]
@@ -65,16 +65,16 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "hebrew"; MessagesFile: "compiler:Languages\Hebrew.isl"
 
 [CustomMessages]
-english.ImportFolder=Import folder into Lightspeed
-hebrew.ImportFolder=ייבוא התיקייה ל-Lightspeed
-english.ImportImage=Import into Lightspeed
-hebrew.ImportImage=ייבוא ל-Lightspeed
-english.OpenCatalog=Open with Lightspeed (import the catalog)
-hebrew.OpenCatalog=פתיחה ב-Lightspeed (ייבוא הקטלוג)
-english.AssocCatalog=Open Lightroom catalogs (.lrcat) with Lightspeed
-hebrew.AssocCatalog=פתיחת קטלוגים של Lightroom ‏(.lrcat) ב-Lightspeed
-english.UserGuide=Lightspeed guide
-hebrew.UserGuide=המדריך של Lightspeed
+english.ImportFolder=Import folder into Tonelark
+hebrew.ImportFolder=ייבוא התיקייה ל-Tonelark
+english.ImportImage=Import into Tonelark
+hebrew.ImportImage=ייבוא ל-Tonelark
+english.OpenCatalog=Open with Tonelark (import the catalog)
+hebrew.OpenCatalog=פתיחה ב-Tonelark (ייבוא הקטלוג)
+english.AssocCatalog=Open Lightroom catalogs (.lrcat) with Tonelark
+hebrew.AssocCatalog=פתיחת קטלוגים של Lightroom ‏(.lrcat) ב-Tonelark
+english.UserGuide=Tonelark guide
+hebrew.UserGuide=המדריך של Tonelark
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -94,21 +94,21 @@ Type: filesandordirs; Name: "{app}\lib\darktable\plugins"
 
 [Registry]
 ; right click on a folder: import it
-Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoLightspeed"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoTonelark"; \
   ValueType: string; ValueData: "{cm:ImportFolder}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoLightspeed"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoTonelark"; \
   ValueType: string; ValueName: "Icon"; ValueData: """{app}\bin\{#MyAppExeName}"",0"; Flags: uninsdeletekey
-Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoLightspeed\command"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoTonelark\command"; \
   ValueType: string; ValueData: """{app}\bin\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
 ; right click on a picture: import it
-Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoLightspeed"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoTonelark"; \
   ValueType: string; ValueData: "{cm:ImportImage}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoLightspeed"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoTonelark"; \
   ValueType: string; ValueName: "Icon"; ValueData: """{app}\bin\{#MyAppExeName}"",0"; Flags: uninsdeletekey
-Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoLightspeed"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoTonelark"; \
   ValueType: string; ValueName: "AppliesTo"; ValueData: "System.Kind:=picture"; Flags: uninsdeletekey
-Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoLightspeed\command"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\*\shell\ImportImageIntoTonelark\command"; \
   ValueType: string; ValueData: """{app}\bin\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
 ; "open with"
@@ -118,18 +118,18 @@ Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\shell\open\com
   ValueType: string; ValueData: """{app}\bin\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
 ; Lightroom catalogs
-Root: HKA; Subkey: "Software\Classes\Lightspeed.lrcat"; \
+Root: HKA; Subkey: "Software\Classes\Tonelark.lrcat"; \
   ValueType: string; ValueData: "Lightroom catalog"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\Lightspeed.lrcat\DefaultIcon"; \
+Root: HKA; Subkey: "Software\Classes\Tonelark.lrcat\DefaultIcon"; \
   ValueType: string; ValueData: """{app}\bin\{#MyAppExeName}"",0"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\Lightspeed.lrcat\shell\open"; \
+Root: HKA; Subkey: "Software\Classes\Tonelark.lrcat\shell\open"; \
   ValueType: string; ValueData: "{cm:OpenCatalog}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\Lightspeed.lrcat\shell\open\command"; \
+Root: HKA; Subkey: "Software\Classes\Tonelark.lrcat\shell\open\command"; \
   ValueType: string; ValueData: """{app}\bin\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\.lrcat\OpenWithProgids"; \
-  ValueType: string; ValueName: "Lightspeed.lrcat"; ValueData: ""; Flags: uninsdeletevalue
+  ValueType: string; ValueName: "Tonelark.lrcat"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\.lrcat"; \
-  ValueType: string; ValueData: "Lightspeed.lrcat"; Flags: uninsdeletevalue; Tasks: lrcatassoc
+  ValueType: string; ValueData: "Tonelark.lrcat"; Flags: uninsdeletevalue; Tasks: lrcatassoc
 
 ; raw and image files that this build reads, generated by make_installer.py
 #include "lightspeed_openwith.iss"
