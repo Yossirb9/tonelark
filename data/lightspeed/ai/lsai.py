@@ -395,8 +395,34 @@ def cmd_providers(req):
     return dict(providers=out)
 
 
-def ask_model(provider, prompt, images, cwd, model='', timeout=600, write=False):
-    """one request to a command line AI tool; returns the text answer"""
+# only what a photo request needs: no MCP servers, plugins, browser or computer
+# use of the user's setup (faster, far fewer tokens, no errors from servers
+# that are not running)
+CODEX_LEAN = ['--disable', 'plugins', '--disable', 'apps', '--disable', 'browser_use',
+              '--disable', 'computer_use', '--disable', 'in_app_browser']
+CLAUDE_LEAN = ['--strict-mcp-config', '--disable-slash-commands', '--setting-sources', 'project',
+               '--exclude-dynamic-system-prompt-sections']
+
+
+def _codex_mcp_off():
+    """-c overrides that switch off the MCP servers of the user's Codex config"""
+    path = os.path.join(os.environ.get('CODEX_HOME') or os.path.join(os.path.expanduser('~'), '.codex'),
+                        'config.toml')
+    out = []
+    try:
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                m = re.match(r'^\s*\[mcp_servers\.([A-Za-z0-9_-]+)\]\s*$', line)
+                if m:
+                    out += ['-c', 'mcp_servers.%s.enabled=false' % m.group(1)]
+    except OSError:
+        pass
+    return out
+
+
+def ask_model(provider, prompt, images, cwd, model='', timeout=600, images_out=False):
+    """one request to a command line AI tool; returns the text answer (and,
+    with images_out, the images Codex generated in this session)"""
     if provider == 'claude':
         exe = _which('claude')
         if not exe:
@@ -404,7 +430,7 @@ def ask_model(provider, prompt, images, cwd, model='', timeout=600, write=False)
         names = ', '.join(os.path.basename(i) for i in images)
         text = ('Read the image file(s) %s in the current folder.\n\n%s' % (names, prompt)) if images else prompt
         args = [exe, '-p', '--output-format', 'json', '--no-session-persistence',
-                '--tools', 'Read', '--allowedTools', 'Read']
+                '--tools', 'Read', '--allowedTools', 'Read'] + CLAUDE_LEAN
         if model:
             args += ['--model', model]
         rc, so, se = _run(args, cwd, text, timeout)
@@ -415,25 +441,52 @@ def ask_model(provider, prompt, images, cwd, model='', timeout=600, write=False)
         if d.get('is_error'):
             msg = d.get('result', '')
             if 'login' in msg.lower():
-                msg += ' (open a terminal, run "claude" and type /login)'
+                msg += ' (click "Connect..." next to the AI choice)'
             raise RuntimeError(msg)
-        return d.get('result', '')
+        return (d.get('result', ''), []) if images_out else d.get('result', '')
     if provider == 'codex':
         exe = _which('codex')
         if not exe:
             raise RuntimeError('Codex CLI is not installed')
-        args = [exe, 'exec', '--skip-git-repo-check', '-s', 'workspace-write' if write else 'read-only']
+        args = [exe, 'exec', '--skip-git-repo-check', '-s', 'read-only', '--json'] + CODEX_LEAN + _codex_mcp_off()
+        if not images_out:
+            args += ['--disable', 'image_generation']
         if model:
             args += ['-m', model]
         args += ['--image=' + i for i in images] + ['-']
         rc, so, se = _run(args, cwd, prompt, timeout)
-        if rc != 0 and not so.strip():
-            raise RuntimeError(se.strip()[-400:] or 'Codex failed')
-        return so
+        thread, texts, errors = None, [], []
+        for line in so.splitlines():
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get('type') == 'thread.started':
+                thread = ev.get('thread_id')
+            item = ev.get('item') or {}
+            if ev.get('type') == 'item.completed' and item.get('type') == 'agent_message':
+                texts.append(item.get('text', ''))
+            if ev.get('type') in ('error', 'turn.failed'):
+                errors.append(str(ev.get('message') or ev.get('error') or ev)[:300])
+        if not texts and (errors or rc != 0):
+            msg = '; '.join(errors) or se.strip()[-400:] or 'Codex failed'
+            if 'login' in msg.lower() or 'auth' in msg.lower():
+                msg += ' (click "Connect..." next to the AI choice)'
+            raise RuntimeError(msg)
+        text = '\n'.join(texts)
+        if not images_out:
+            return text
+        made = []
+        if thread:
+            folder = os.path.join(os.path.expanduser('~'), '.codex', 'generated_images', thread)
+            if os.path.isdir(folder):
+                made = sorted((os.path.join(folder, f) for f in os.listdir(folder)
+                               if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))), key=os.path.getmtime)
+        return text, made
     if provider == 'gemini':
         exe = _which('gemini')
         if not exe:
-            raise RuntimeError('Gemini CLI is not installed (npm install -g @google/gemini-cli)')
+            raise RuntimeError('Gemini CLI is not installed (click "Install...")')
         refs = ' '.join('@' + os.path.basename(i) for i in images)
         args = [exe, '-p', '-']
         if model:
@@ -441,7 +494,7 @@ def ask_model(provider, prompt, images, cwd, model='', timeout=600, write=False)
         rc, so, se = _run(args, cwd, (refs + '\n' + prompt) if refs else prompt, timeout)
         if rc != 0 and not so.strip():
             raise RuntimeError(se.strip()[-400:] or 'Gemini failed')
-        return so
+        return (so, []) if images_out else so
     raise RuntimeError('unknown provider ' + provider)
 
 
@@ -503,10 +556,10 @@ def cmd_rate(req):
     work = tempfile.mkdtemp(prefix='lsai_rate_')
     bursts = req.get('bursts') or []
     burst_of = {i: b for b, ids in enumerate(bursts) for i in ids if len(ids) > 1}
-    results, errors = [], []
     sheets = [images[k:k + per] for k in range(0, len(images), per)]
-    for s, chunk in enumerate(sheets):
-        progress(s / len(sheets), 'asking %s, sheet %d/%d' % (provider, s + 1, len(sheets)))
+
+    def one_sheet(s):
+        chunk = sheets[s]
         name = 'sheet_%d.jpg' % (s + 1)
         make_sheet([im['path'] for im in chunk], os.path.join(work, name))
         groups = {}
@@ -515,22 +568,34 @@ def cmd_rate(req):
                 groups.setdefault(burst_of[im['id']], []).append(k + 1)
         btext = ''.join('Photos %s are a burst of the same moment: give the best of them the highest score.\n'
                         % ', '.join(map(str, g)) for g in groups.values() if len(g) > 1)
-        ctext = ('Also say if each photo matches this request: "%s" (field "match": true or false).\n' % criteria) if criteria else ''
+        ctext = ('Also say if each photo matches this request: "%s" (field "match": true or false).\n'
+                 % criteria) if criteria else ''
         prompt = RATE_PROMPT.format(sheet=name, n=len(chunk), bursts=btext, criteria=ctext,
                                     match='"match":true,' if criteria else '')
-        try:
-            answer = ask_model(provider, prompt, [os.path.join(work, name)], work,
-                               req.get('model', ''), int(req.get('timeout', 600)))
-            data = extract_json(answer)
-            for r in data.get('photos', []):
-                n = int(r.get('n', 0))
-                if 1 <= n <= len(chunk):
-                    results.append(dict(id=chunk[n - 1]['id'], score=float(r.get('score', 0)),
-                                        keep=bool(r.get('keep', False)), match=r.get('match'),
-                                        reason=str(r.get('reason', ''))[:200]))
-        except Exception as e:     # noqa: BLE001
-            errors.append(str(e)[:300])
-            log('sheet %d: %s' % (s + 1, e))
+        answer = ask_model(provider, prompt, [os.path.join(work, name)], work,
+                           req.get('model', ''), int(req.get('timeout', 600)))
+        out = []
+        for r in extract_json(answer).get('photos', []):
+            n = int(r.get('n', 0))
+            if 1 <= n <= len(chunk):
+                out.append(dict(id=chunk[n - 1]['id'], score=float(r.get('score', 0)),
+                                keep=bool(r.get('keep', False)), match=r.get('match'),
+                                reason=str(r.get('reason', ''))[:200]))
+        return out
+
+    results, errors, done = [], [], 0
+    progress(0.02, 'asking %s: %d sheet(s) of up to %d photos' % (provider, len(sheets), per))
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=max(1, min(3, len(sheets)))) as pool:
+        futures = {pool.submit(one_sheet, k): k for k in range(len(sheets))}
+        for f in as_completed(futures):
+            done += 1
+            try:
+                results += f.result()
+            except Exception as e:     # noqa: BLE001
+                errors.append(str(e)[:300])
+                log('sheet %d: %s' % (futures[f] + 1, e))
+            progress(done / len(sheets), 'asking %s, %d/%d sheets answered' % (provider, done, len(sheets)))
     shutil.rmtree(work, ignore_errors=True)
     progress(1.0, 'done')
     return dict(images=results, errors=errors, provider=provider, sheets=len(sheets))
@@ -687,19 +752,6 @@ Change only what is inside the marked region, keep everything else as it is, kee
 Do not run shell commands and do not write files, just generate the edited image once, then answer DONE."""
 
 
-def _codex_images_since(t0):
-    """images Codex generated since t0 (it keeps them in ~/.codex/generated_images)"""
-    root = os.path.join(os.path.expanduser('~'), '.codex', 'generated_images')
-    found = []
-    for dirpath, _, files in os.walk(root):
-        for f in files:
-            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                path = os.path.join(dirpath, f)
-                if os.path.getmtime(path) >= t0 - 1:
-                    found.append(path)
-    return sorted(found, key=os.path.getmtime)
-
-
 def blend_generated(src, gen, rect, kind='rect', feather=0.08):
     """the region of a generated image blended into the full size source:
     colors matched outside the region, the rest of the source untouched"""
@@ -757,10 +809,9 @@ def cmd_genedit(req):
     imwrite(os.path.join(work, 'marked.png'), marked)
     progress(0.1, 'Codex is editing the region (this can take a few minutes)')
     t0 = time.time()
-    answer = ask_model('codex', EDIT_PROMPT.format(request=req['prompt'].strip()),
-                       [os.path.join(work, 'photo.png'), os.path.join(work, 'marked.png')],
-                       work, req.get('model', ''), int(req.get('timeout', 900)))
-    made = _codex_images_since(t0)
+    answer, made = ask_model('codex', EDIT_PROMPT.format(request=req['prompt'].strip()),
+                             [os.path.join(work, 'photo.png'), os.path.join(work, 'marked.png')],
+                             work, req.get('model', ''), int(req.get('timeout', 900)), images_out=True)
     made += [os.path.join(work, f) for f in os.listdir(work)
              if f.lower().endswith(('.png', '.jpg', '.webp')) and f not in ('photo.png', 'marked.png')]
     if not made:

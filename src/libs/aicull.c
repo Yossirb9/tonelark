@@ -122,12 +122,25 @@ static void _set_status(dt_lib_module_t *self, const char *text)
   gtk_widget_set_tooltip_text(d->status, text);
 }
 
-static void _pick(GList *imgs)
+// the pick flags of the analysed photos are replaced by the new ones
+static void _set_picks(GList *all, GList *picks)
 {
-  if(!imgs) return;
   guint tagid = 0;
   dt_tag_new(DT_PICK_TAG, &tagid);
-  dt_tag_attach_images(tagid, imgs, TRUE);
+  if(all) dt_tag_detach_images(tagid, all, TRUE);
+  if(picks) dt_tag_attach_images(tagid, picks, TRUE);
+}
+
+// darktable toggles the reject flag when every photo of a list is already
+// rejected: only reject the others
+static void _reject(GList *imgs)
+{
+  GList *todo = NULL;
+  for(GList *l = imgs; l; l = g_list_next(l))
+    if(dt_ratings_get(GPOINTER_TO_INT(l->data)) != DT_VIEW_REJECT)
+      todo = g_list_prepend(todo, l->data);
+  if(todo) dt_ratings_apply_on_list(todo, DT_VIEW_REJECT, TRUE);
+  g_list_free(todo);
 }
 
 static void _note(const dt_imgid_t id, const char *text)
@@ -164,7 +177,7 @@ static void _apply_cull(_job_t *j)
     const gboolean in_burst = json_object_get_int_member(o, "burst_size") > 1;
     all = g_list_prepend(all, GINT_TO_POINTER(id));
     if(j->stars)
-      dt_ratings_apply_on_image(id, json_object_get_int_member(o, "stars"), FALSE, FALSE, FALSE);
+      dt_ratings_apply_on_image(id, json_object_get_int_member(o, "stars"), FALSE, TRUE, FALSE);
     if(in_burst)
     {
       const dt_imgid_t best = GPOINTER_TO_INT(g_hash_table_lookup(best_of, GINT_TO_POINTER(burst + 1)));
@@ -183,8 +196,8 @@ static void _apply_cull(_job_t *j)
     _note(id, note);
     g_free(note);
   }
-  _pick(picks);
-  if(rejects) dt_ratings_apply_on_list(rejects, DT_VIEW_REJECT, TRUE);
+  _set_picks(all, picks);
+  _reject(rejects);
   dt_undo_end_group(darktable.undo);
 
   gchar *msg = g_strdup_printf(_("%d photos, %d bursts: the best of each is picked%s"),
@@ -216,7 +229,7 @@ static void _apply_rate(_job_t *j)
     const gboolean keep = json_object_get_boolean_member_with_default(o, "keep", FALSE);
     all = g_list_prepend(all, GINT_TO_POINTER(id));
     if(j->stars)
-      dt_ratings_apply_on_image(id, CLAMP((int)(score / 2.0 + 0.5), 1, 5), FALSE, FALSE, FALSE);
+      dt_ratings_apply_on_image(id, CLAMP((int)(score / 2.0 + 0.5), 1, 5), FALSE, TRUE, FALSE);
     if(keep)
       picks = g_list_prepend(picks, GINT_TO_POINTER(id));
     else if(j->reject)
@@ -229,8 +242,8 @@ static void _apply_rate(_job_t *j)
     _note(id, note);
     g_free(note);
   }
-  _pick(picks);
-  if(rejects) dt_ratings_apply_on_list(rejects, DT_VIEW_REJECT, TRUE);
+  _set_picks(all, picks);
+  _reject(rejects);
   if(matches)
   {
     guint tagid = 0;
@@ -277,9 +290,9 @@ static gboolean _job_done(gpointer data)
   {
     const int n = json_object_get_int_member(j->result, "replaced");
     gchar *msg = n > 0
-      ? g_strdup_printf(ngettext("Best Take: %d face replaced, the new photo is grouped with the burst",
-                                 "Best Take: %d faces replaced, the new photo is grouped with the burst", n), n)
-      : g_strdup(_("Best Take: every face is already at its best in one photo, it is grouped with the burst"));
+      ? g_strdup_printf(ngettext("Best Take: %d face replaced, the new photo is on top of the burst group",
+                                 "Best Take: %d faces replaced, the new photo is on top of the burst group", n), n)
+      : g_strdup(_("Best Take: every face is already at its best in one photo, it is on top of the burst group"));
     _set_status(j->self, msg);
     dt_control_log("%s", msg);
     g_free(msg);
@@ -416,7 +429,13 @@ static int32_t _run_job(dt_job_t *job)
     {
       j->made = dt_lsai_import_derived(first, out);
       if(dt_is_valid_imgid(j->made))
+      {
         dt_metadata_set(j->made, NOTES_KEY, _("Best Take: the best face of everyone in the burst"), FALSE);
+        // one group: the burst under the Best Take
+        for(GList *l = j->imgs; l; l = g_list_next(l))
+          dt_grouping_add_to_group(j->made, GPOINTER_TO_INT(l->data));
+        dt_grouping_change_representative(j->made);
+      }
     }
     g_free(out);
   }

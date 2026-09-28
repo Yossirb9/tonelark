@@ -144,9 +144,24 @@ static gboolean _spawn_wait(gchar **argv, const char *log, dt_job_t *job, GError
   si.hStdOutput = hlog;
   si.hStdError = hlog;
   PROCESS_INFORMATION pi = { 0 };
+  // the helper and the AI tools it starts live in a job object: cancelling,
+  // or closing Lightspeed, stops all of them
+  HANDLE hjob = CreateJobObjectW(NULL, NULL);
+  if(hjob)
+  {
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = { 0 };
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    SetInformationJobObject(hjob, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+  }
   // no console window pops up for the helper
-  const BOOL ok = CreateProcessW(NULL, wcmd, NULL, NULL, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+  const BOOL ok = CreateProcessW(NULL, wcmd, NULL, NULL, TRUE,
+                                 CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
                                  NULL, NULL, &si, &pi);
+  if(ok)
+  {
+    if(hjob) AssignProcessToJobObject(hjob, pi.hProcess);
+    ResumeThread(pi.hThread);
+  }
   g_free(wcmd);
   if(hlog != INVALID_HANDLE_VALUE) CloseHandle(hlog);
   if(hnul != INVALID_HANDLE_VALUE) CloseHandle(hnul);
@@ -154,6 +169,7 @@ static gboolean _spawn_wait(gchar **argv, const char *log, dt_job_t *job, GError
   {
     g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_FAILED, _("cannot start the AI helper (error %lu)"),
                 GetLastError());
+    if(hjob) CloseHandle(hjob);
     return FALSE;
   }
   while(WaitForSingleObject(pi.hProcess, 300) == WAIT_TIMEOUT)
@@ -161,12 +177,16 @@ static gboolean _spawn_wait(gchar **argv, const char *log, dt_job_t *job, GError
     _read_progress(log, job, &pos);
     if(_cancelled(job))
     {
-      TerminateProcess(pi.hProcess, 1);
+      if(hjob)
+        TerminateJobObject(hjob, 1);
+      else
+        TerminateProcess(pi.hProcess, 1);
       break;
     }
   }
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
+  if(hjob) CloseHandle(hjob);     // stops what is left of the tree
 #else
   const int fd = g_open(log, O_WRONLY | O_CREAT | O_TRUNC, 0600);
   GPid pid;
@@ -369,12 +389,10 @@ static gboolean _providers_ready(gpointer data)
   return G_SOURCE_REMOVE;
 }
 
-static int32_t _providers_job(dt_job_t *job)
+// the answer of the helper, applied in the gui thread
+static gboolean _providers_apply(gpointer data)
 {
-  JsonObject *req = json_object_new();
-  GError *error = NULL;
-  JsonObject *res = dt_lsai_run("providers", req, NULL, &error);
-  json_object_unref(req);
+  JsonObject *res = data;
   if(res)
   {
     JsonArray *arr = json_object_get_array_member(res, "providers");
@@ -403,12 +421,21 @@ static int32_t _providers_job(dt_job_t *job)
     _known = TRUE;
     json_object_unref(res);
   }
-  else
+  return _providers_ready(NULL);
+}
+
+static int32_t _providers_job(dt_job_t *job)
+{
+  JsonObject *req = json_object_new();
+  GError *error = NULL;
+  JsonObject *res = dt_lsai_run("providers", req, NULL, &error);
+  json_object_unref(req);
+  if(!res)
   {
     dt_print(DT_DEBUG_ALWAYS, "[lightspeed ai] %s", error ? error->message : "providers failed");
     g_clear_error(&error);
   }
-  g_idle_add(_providers_ready, NULL);
+  g_idle_add(_providers_apply, res);
   return 0;
 }
 
@@ -418,7 +445,10 @@ void dt_lsai_providers_refresh(void)
   _checking = TRUE;
   for(GList *l = _uis; l; l = g_list_next(l)) _ui_update(l->data);
   dt_job_t *job = dt_control_job_create(_providers_job, "%s", _("checking the AI tools"));
-  if(job) dt_control_add_job(DT_JOB_QUEUE_SYSTEM_BG, job);
+  if(job)
+    dt_control_add_job(DT_JOB_QUEUE_SYSTEM_BG, job);
+  else
+    _checking = FALSE;
 }
 
 static int _ui_selected(dt_lsai_provider_ui_t *ui)
