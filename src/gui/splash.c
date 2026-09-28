@@ -111,6 +111,8 @@ void dt_splash_screen_create(const gboolean force)
   }
 
   darktable.splash.start_screen = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  // the taskbar shows this title while the program loads
+  gtk_window_set_title(GTK_WINDOW(darktable.splash.start_screen), "Tonelark");
   gtk_window_set_decorated(GTK_WINDOW(darktable.splash.start_screen), FALSE);
   gtk_window_set_resizable(GTK_WINDOW(darktable.splash.start_screen), FALSE);
   gtk_window_set_position(GTK_WINDOW(darktable.splash.start_screen), GTK_WIN_POS_CENTER);
