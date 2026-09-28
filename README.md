@@ -8,9 +8,6 @@
 
 </div>
 
-![הספרייה עם פאנל ה-AI](docs/screenshots/library.jpg)
-![מסך העריכה](docs/screenshots/develop.jpg)
-
 <div dir="rtl">
 
 ## הורדה והתקנה

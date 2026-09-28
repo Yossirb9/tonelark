@@ -44,8 +44,8 @@ void darktable_show_about_dialog()
                                   "a darktable fork with a Lightroom-style workflow.\n"
                                   "not affiliated with or endorsed by Adobe; Adobe and Lightroom"
                                   " are trademarks of Adobe Inc."));
-  gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://www.darktable.org/");
-  gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "website");
+  gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://github.com/Yossirb9/tonelark");
+  gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "Tonelark on GitHub");
   const dt_logo_season_t season = dt_util_get_logo_season();
   char *icon;
   if(season != DT_LOGO_SEASON_NONE)
