@@ -574,6 +574,20 @@ static JsonObject *_cmd_action(JsonObject *args, gchar **error)
   if(json_object_has_member(args, "ids"))
   {
     GList *ids = _ids(args);
+    // the tools work on the selection as the library shows it: photos out
+    // of the current collection would be left out without a word
+    GList *shown = dt_collection_get_all(darktable.collection, -1);
+    int missing = 0;
+    for(GList *l = ids; l; l = g_list_next(l))
+      if(!g_list_find(shown, l->data)) missing++;
+    g_list_free(shown);
+    if(missing)
+    {
+      *error = g_strdup_printf("%d of the photos are not in the collection shown in Tonelark: show their"
+                               " folder (Collections) and try again", missing);
+      g_list_free(ids);
+      return NULL;
+    }
     dt_selection_clear(darktable.selection);
     if(ids) dt_selection_select_list(darktable.selection, ids);
     g_list_free(ids);

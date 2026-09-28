@@ -148,7 +148,7 @@ TOOLS = [
          inputSchema={'type': 'object', 'properties': {'from_id': {'type': 'integer'}, 'to_ids': IDS}, 'required': ['from_id', 'to_ids']}),
     dict(name='export_photos', description='Export photos as JPEG files with their edits.',
          inputSchema={'type': 'object', 'properties': {'ids': IDS, 'folder': {'type': 'string', 'description': 'absolute folder path'}, 'max_size': {'type': 'integer', 'description': 'longest side in pixels, 0 = full size', 'default': 0}, 'quality': {'type': 'integer', 'default': 92}}, 'required': ['ids', 'folder']}),
-    dict(name='run_ai_tool', description='Run one of the AI tools of Tonelark on photos (they work on contact sheets, cheaply, and the results appear in Tonelark: stars, flags, notes, edits, keywords). find_best_shots works on this computer without AI. Check the results later with list_photos.',
+    dict(name='run_ai_tool', description='Run one of the AI tools of Tonelark on photos (they work on contact sheets, cheaply, and the results appear in Tonelark: stars, flags, notes, edits, keywords). find_best_shots works on this computer without AI. The photos must be in the collection Tonelark shows (list_photos scope collection). Check the results later with list_photos.',
          inputSchema={'type': 'object', 'properties': {'tool': {'type': 'string', 'enum': sorted(AI_TOOLS)}, 'ids': IDS, 'instruction': {'type': 'string', 'description': 'for auto_edit: the look to make'}}, 'required': ['tool', 'ids']}),
 ]
 
