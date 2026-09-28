@@ -412,6 +412,9 @@ void gui_init(dt_lib_module_t *self)
   d->status = gtk_label_new(_("mark an area, describe the change"));
   gtk_label_set_xalign(GTK_LABEL(d->status), 0.0f);
   gtk_label_set_line_wrap(GTK_LABEL(d->status), TRUE);
+  // wrap in the width of the panel instead of widening it
+  gtk_label_set_line_wrap_mode(GTK_LABEL(d->status), PANGO_WRAP_WORD_CHAR);
+  gtk_label_set_max_width_chars(GTK_LABEL(d->status), 1);
   gtk_widget_set_name(d->status, "lsai-state");
 
   self->widget = dt_gui_vbox(dt_gui_hbox(dt_gui_expand(d->select), dt_gui_expand(d->shape)), scroll,

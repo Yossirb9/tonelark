@@ -46,6 +46,7 @@
 #include "common/iop_order.h"
 #include "common/l10n.h"
 #include "common/lightroom_catalog.h"
+#include "common/lightspeed_bridge.h"
 #include "common/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
@@ -2074,6 +2075,9 @@ int dt_init(int argc,
   {
     dt_ctl_switch_mode_to("lighttable");
 
+    // Claude Code / Codex chats can work with Lightspeed (MCP server)
+    dt_lsbridge_start();
+
     // all the default shortcuts have been registered
     darktable.control->accel_initialised = TRUE;
 
@@ -2230,6 +2234,8 @@ void dt_get_sysresource_level()
 void dt_cleanup()
 {
   const gboolean init_gui = (darktable.gui != NULL);
+
+  dt_lsbridge_stop();
 
   dt_stop_backthumbs_crawler(TRUE);
 

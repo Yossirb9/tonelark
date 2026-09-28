@@ -27,6 +27,19 @@ style interface and Lightroom catalog import. darktable's processing engine is u
     only the area is blended into the full resolution photo, as a new photo grouped with it.
   - Every panel has the choice of the tool and model, with Install / Connect buttons that open
     the login of a missing or logged out tool.
+- AI assistant (1.2, Library and Develop, `src/libs/aiassist.c`): the AI answers with Lightroom
+  settings (`data/lightspeed/ai/lsedit.py`) that are applied as normal history items
+  (`dt_lsai_apply_edit()`, `dt_lightroom_update_develop()`: only the given settings change):
+  *Auto Edit* with words (one photo: a second request refines the rendered result; several:
+  contact sheets of 12), *Match Look* (the look of a reference, exposure from the camera
+  settings as Lightroom's Match Total Exposures, white balance relative to each camera white
+  balance, optional AI fine-tuning), *Suggest Crops* (crop module + rotate and perspective),
+  *Keywords & Captions*.
+- Chat bridge (MCP, 1.2): `data/lightspeed/ai/lsmcp.py` is an MCP server (stdio) for Claude
+  Code, Codex and Gemini CLI; it talks to the running Lightspeed through request files in
+  `<config dir>/mcp` (`src/common/lightspeed_bridge.c`). *Connect Chat* registers it.
+- White balance tint follows Adobe's definition (Planckian locus, positive = green light, the
+  photo gets more magenta), so Lightroom tints import with the right sign.
 - Fixes: Exif kept in exports with a fresh configuration, guided filter on the CPU (garbage at
   the bottom of GPU exports with haze removal on Intel Xe), Lightroom color grading hues.
 

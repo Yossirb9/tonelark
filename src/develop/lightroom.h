@@ -49,6 +49,16 @@ gboolean dt_lightroom_import_xmp_buffer(const dt_imgid_t imgid,
                                         const size_t size,
                                         const dt_lightroom_import_flags_t flags);
 
+/* change the edit of the image loaded in dev with Lightroom settings (Camera
+   Raw names and values: Exposure2012, Temperature, HueAdjustmentRed...): only
+   the given settings change, the other parameters of the modules are kept.
+   New history items are added to dev, the caller writes the history. */
+gboolean dt_lightroom_update_develop(dt_develop_t *dev, GHashTable *crs);
+
+/* the current edit of the image loaded in dev as Lightroom settings (basic
+   panel, HSL, color grading), a new hash table of Camera Raw names -> values */
+GHashTable *dt_lightroom_read_develop(dt_develop_t *dev);
+
 /* darktable color label (0 red .. 4 purple) of a Lightroom label text, -1 if unknown */
 int dt_lightroom_color_label(const char *label);
 

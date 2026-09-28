@@ -57,6 +57,28 @@ dt_imgid_t dt_lsai_import_derived(const dt_imgid_t source, const char *path);
 /* a new temporary folder for the helper files, g_free() it */
 gchar *dt_lsai_tmpdir(void);
 
+/* ---- edits made by the AI or a chat (non destructive, with undo) ---- */
+
+/* the current edit of an image as Lightroom settings (Camera Raw names:
+   Exposure2012, Temperature, HueAdjustmentRed...), with "raw" (TRUE for a raw
+   file), "width"/"height" (the displayed image before the crop), the crop
+   (CropLeft, CropTop, CropRight, CropBottom, 0..1) and Straighten (degrees).
+   Loads the image: call it from a job. json_object_unref() it. */
+JsonObject *dt_lsai_read_edit(const dt_imgid_t imgid);
+
+/* change the edit of an image: Lightroom settings (only the given ones
+   change) and/or the crop and straighten keys above, as new history items
+   with undo. The darkroom follows when the image is open there. Call it
+   from a job or the gui thread. */
+gboolean dt_lsai_apply_edit(const dt_imgid_t imgid, JsonObject *edit);
+
+/* copy the edit of an image to another one, the crop, straighten and
+   retouching excluded (Match Look) */
+gboolean dt_lsai_copy_edit(const dt_imgid_t src, const dt_imgid_t dst);
+
+/* run a function in the gui thread and wait for it (from a job) */
+void dt_lsai_in_gui(GSourceFunc func, gpointer data);
+
 /* ---- choice of the AI tool, shared by the AI panels ---- */
 
 typedef struct dt_lsai_provider_ui_t dt_lsai_provider_ui_t;

@@ -31,6 +31,7 @@
 #include "control/control.h"
 
 #include <ctype.h>
+#include <float.h>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
 #include <libxml/xpathInternals.h>
@@ -1271,6 +1272,9 @@ typedef struct _lr_module_params_t
   dt_iop_module_t *module;   // module giving defaults / version
   const char *instance;      // dedicated instance name or NULL
   void *params;
+  void *neutral;             // "Lightroom neutral" params of the module
+  dt_iop_module_t *target;   // update: the instance that changes, NULL = new one
+  gboolean was_on;           // update: the instance was used before
 } _lr_module_params_t;
 
 #define LR_MAX_MODULES 16
@@ -1281,6 +1285,9 @@ typedef struct _lr_develop_t
   GHashTable *crs;
   _lr_module_params_t mod[LR_MAX_MODULES];
   int count;
+  // update the current edit (AI, chat): the other parameters of the modules
+  // are kept, and settings given as 0 are applied too
+  gboolean update;
 } _lr_develop_t;
 
 static const char *_crs(_lr_develop_t *d, const char *key)
@@ -1305,8 +1312,31 @@ static gboolean _crs_bool(_lr_develop_t *d, const char *key)
   return v && (!g_ascii_strcasecmp(v, "true") || !g_strcmp0(v, "1"));
 }
 
+// is the instance one of the dedicated instances of the basic panel (texture)?
+static gboolean _lr_is_dedicated(const dt_iop_module_t *m)
+{
+  for(int i = 0; i < DT_LSB_COUNT; i++)
+    if(dt_lsb_control(i)->instance && !g_strcmp0(m->multi_name, dt_lsb_control(i)->instance))
+      return TRUE;
+  return FALSE;
+}
+
+// the instance a setting goes to: the dedicated instance by its name, or the
+// first instance that is not a dedicated one (as the basic panel does)
+static dt_iop_module_t *_lr_instance(dt_develop_t *dev, const char *op, const char *instance)
+{
+  for(GList *l = dev->iop; l; l = g_list_next(l))
+  {
+    dt_iop_module_t *m = l->data;
+    if(!dt_iop_module_is(m, op) || m->iop_order == INT_MAX) continue;
+    if(instance ? !g_strcmp0(m->multi_name, instance) : !_lr_is_dedicated(m)) return m;
+  }
+  return NULL;
+}
+
 // params of a module (or dedicated instance), started from the "Lightroom
-// neutral" state of the module the first time it is needed
+// neutral" state of the module the first time it is needed (update: from
+// the current params of the instance when it is used)
 static void *_lr_params(_lr_develop_t *d, const char *op, const char *instance)
 {
   for(int k = 0; k < d->count; k++)
@@ -1324,17 +1354,36 @@ static void *_lr_params(_lr_develop_t *d, const char *op, const char *instance)
        && !g_strcmp0(dt_lsb_control(i)->instance, instance))
       c = dt_lsb_control(i);
 
-  void *params = g_malloc(m->params_size);
+  void *neutral = g_malloc(m->params_size);
   if(c)
-    dt_lsb_neutralize_params(m, c, params);
+    dt_lsb_neutralize_params(m, c, neutral);
   else
-    memcpy(params, m->default_params, m->params_size);
+    memcpy(neutral, m->default_params, m->params_size);
+
+  dt_iop_module_t *target = d->update ? _lr_instance(d->dev, op, instance) : NULL;
+  const gboolean on = target && target->enabled;
+  void *params = g_malloc(m->params_size);
+  memcpy(params, on ? target->params : neutral, m->params_size);
 
   d->mod[d->count].module = m;
   d->mod[d->count].instance = instance;
   d->mod[d->count].params = params;
+  d->mod[d->count].neutral = neutral;
+  d->mod[d->count].target = target;
+  d->mod[d->count].was_on = on;
   d->count++;
   return params;
+}
+
+// copy some fields of the module defaults into params
+static void _lr_copy_defaults(const dt_iop_module_t *m, void *params, const char **fields, const size_t size)
+{
+  for(int k = 0; fields[k]; k++)
+  {
+    void *dst = m->so->get_p ? m->so->get_p(params, fields[k]) : NULL;
+    void *src = m->so->get_p ? m->so->get_p(m->default_params, fields[k]) : NULL;
+    if(dst && src) memcpy(dst, src, size);
+  }
 }
 
 static float *_lr_field(_lr_develop_t *d, const char *op, const char *field)
@@ -1382,11 +1431,12 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
                                     GHashTable *crs,
                                     char *imported,
                                     const size_t imported_len,
-                                    int *n_import)
+                                    int *n_import,
+                                    const gboolean update)
 {
   if(!dev || !crs || !dev->iop) return FALSE;
 
-  _lr_develop_t d = { .dev = dev, .crs = crs, .count = 0 };
+  _lr_develop_t d = { .dev = dev, .crs = crs, .count = 0, .update = update };
   const gboolean is_raw = dt_image_is_raw(&dev->image_storage);
   float v = 0.0f;
 
@@ -1411,7 +1461,7 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
     if(!_crs_float(&d, basic[k].key, &v)
        && !(basic[k].old_key && _crs_float(&d, basic[k].old_key, &v)))
       continue;
-    if(v == 0.0f) continue;
+    if(v == 0.0f && !update) continue;
 
     const dt_lsb_control_t *c = dt_lsb_control(basic[k].id);
     void *params = _lr_params(&d, c->op, c->instance);
@@ -1429,7 +1479,15 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
       dt_print(DT_DEBUG_PARAMS, "[lightroom] image %d: as shot white balance %.0fK tint %+.0f",
                imgid, t0, t1);
   }
-  if(wb && g_strcmp0(wb, "As Shot"))
+  if(wb && !g_strcmp0(wb, "As Shot") && update)
+  {
+    // back to the white balance of the camera
+    void *params = _lr_params(&d, "channelmixerrgb", NULL);
+    dt_iop_module_t *m = dt_iop_get_module_from_list(dev->iop, "channelmixerrgb");
+    static const char *fields[] = { "illuminant", "illum_fluo", "illum_led", "temperature", "x", "y", NULL };
+    if(params && m) _lr_copy_defaults(m, params, fields, sizeof(float));
+  }
+  else if(wb && g_strcmp0(wb, "As Shot"))
   {
     gboolean has_wb = FALSE;
     if(is_raw && _crs_float(&d, "Temperature", &temp))
@@ -1466,6 +1524,19 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
     }
     if(norm) *norm = TRUE;
   }
+  else if(update && _crs(&d, "ConvertToGrayscale"))
+  {
+    // back to color
+    void *params = _lr_params(&d, "channelmixerrgb", NULL);
+    dt_iop_module_t *m = dt_iop_get_module_from_list(dev->iop, "channelmixerrgb");
+    static const char *grey[] = { "grey", NULL };
+    static const char *norm[] = { "normalize_grey", NULL };
+    if(params && m)
+    {
+      _lr_copy_defaults(m, params, grey, 3 * sizeof(float));
+      _lr_copy_defaults(m, params, norm, sizeof(gboolean));
+    }
+  }
 
   // HSL -> color equalizer
   static const char *lr_colors[8] =
@@ -1476,19 +1547,19 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
   {
     char key[64], field[64];
     snprintf(key, sizeof(key), "HueAdjustment%s", lr_colors[k]);
-    if(_crs_float(&d, key, &v) && v != 0.0f)
+    if(_crs_float(&d, key, &v) && (v != 0.0f || update))
     {
       snprintf(field, sizeof(field), "hue_%s", dt_colors[k]);
       _lr_set(&d, "colorequal", field, CLAMP(v * 0.3f, -180.0f, 180.0f));
     }
     snprintf(key, sizeof(key), "SaturationAdjustment%s", lr_colors[k]);
-    if(_crs_float(&d, key, &v) && v != 0.0f)
+    if(_crs_float(&d, key, &v) && (v != 0.0f || update))
     {
       snprintf(field, sizeof(field), "sat_%s", dt_colors[k]);
       _lr_set(&d, "colorequal", field, CLAMP(1.0f + v / 100.0f, 0.0f, 2.0f));
     }
     snprintf(key, sizeof(key), "LuminanceAdjustment%s", lr_colors[k]);
-    if(_crs_float(&d, key, &v) && v != 0.0f)
+    if(_crs_float(&d, key, &v) && (v != 0.0f || update))
     {
       snprintf(field, sizeof(field), "bright_%s", dt_colors[k]);
       _lr_set(&d, "colorequal", field, CLAMP(1.0f + v * 0.004f, 0.0f, 2.0f));
@@ -1510,14 +1581,24 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
   for(int k = 0; k < G_N_ELEMENTS(grading); k++)
   {
     float hue = 0.0f, sat = 0.0f, lum = 0.0f;
-    if(_crs_float(&d, grading[k].sat, &sat) && sat > 0.0f)
+    if(_crs_float(&d, grading[k].sat, &sat) && (sat > 0.0f || update))
     {
-      _crs_float(&d, grading[k].hue, &hue);
-      _lr_set(&d, "colorbalancergb", grading[k].H, _lr_hue_to_dt(hue));
+      if(sat > 0.0f)
+      {
+        _crs_float(&d, grading[k].hue, &hue);
+        _lr_set(&d, "colorbalancergb", grading[k].H, _lr_hue_to_dt(hue));
+      }
       _lr_set(&d, "colorbalancergb", grading[k].C, CLAMP(sat / 100.0f * 0.3f, 0.0f, 1.0f));
     }
-    if(_crs_float(&d, grading[k].lum, &lum) && lum != 0.0f)
-      _lr_add(&d, "colorbalancergb", grading[k].Y, lum / 100.0f * (k == 3 ? 0.02f : 0.25f));
+    if(_crs_float(&d, grading[k].lum, &lum) && (lum != 0.0f || update))
+    {
+      if(!update)
+        _lr_add(&d, "colorbalancergb", grading[k].Y, lum / 100.0f * (k == 3 ? 0.02f : 0.25f));
+      else if(k == 0 || k == 2)
+        _lr_set(&d, "colorbalancergb", grading[k].Y, lum / 100.0f * 0.25f);
+      // (the luminance of highlights and global is shared with whites and
+      // blacks: an update sets it with them)
+    }
   }
 
   // detail: sharpening and noise reduction
@@ -1537,6 +1618,41 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
     _lr_params(&d, "lens", NULL);
   if(_crs_bool(&d, "AutoLateralCA"))
     _lr_params(&d, "cacorrectrgb", NULL);
+
+  if(update)
+  {
+    // new history items of the develop, the caller writes the history
+    gboolean any = FALSE;
+    for(int k = 0; k < d.count; k++)
+    {
+      _lr_module_params_t *mp = &d.mod[k];
+      const gboolean neutral = !memcmp(mp->params, mp->neutral, mp->module->params_size);
+      // nothing to switch on for a module left neutral
+      if(mp->was_on || !neutral)
+      {
+        dt_iop_module_t *m = mp->target;
+        if(!m && mp->instance)
+        {
+          // the dedicated instance does not exist yet
+          m = dt_dev_module_duplicate_ext(dev, mp->module, TRUE);
+          if(m)
+          {
+            g_strlcpy(m->multi_name, mp->instance, sizeof(m->multi_name));
+            m->multi_name_hand_edited = TRUE;
+          }
+        }
+        if(!m) m = mp->module;
+        memcpy(m->params, mp->params, m->params_size);
+        m->enabled = TRUE;
+        dt_dev_add_history_item_ext(dev, m, TRUE, TRUE);
+        dt_print(DT_DEBUG_PARAMS, "[lightroom] update image %d: %s '%s'", imgid, m->op, m->multi_name);
+        any = TRUE;
+      }
+      g_free(mp->params);
+      g_free(mp->neutral);
+    }
+    return any;
+  }
 
   // write the history items
   const gboolean any = d.count > 0;
@@ -1563,6 +1679,7 @@ static gboolean _lightspeed_develop(dt_develop_t *dev,
     _add_hist_module(imgid, mp->module, mp->params, multi_priority, mp->instance,
                      imported, imported_len, n_import);
     g_free(mp->params);
+    g_free(mp->neutral);
   }
 
   return any;
@@ -1958,7 +2075,7 @@ static gboolean _lightroom_import_doc(const dt_imgid_t imgid,
   }
 
   if(dev != NULL
-     && _lightspeed_develop(dev, imgid, data.crs, imported, sizeof(imported), &n_import))
+     && _lightspeed_develop(dev, imgid, data.crs, imported, sizeof(imported), &n_import, FALSE))
     refresh_needed = TRUE;
   g_hash_table_destroy(data.crs);
 
@@ -2038,6 +2155,135 @@ gboolean dt_lightroom_import(dt_imgid_t imgid, dt_develop_t *dev, gboolean iauto
                                 iauto, pathname);
   g_free(pathname);
   return res;
+}
+
+gboolean dt_lightroom_update_develop(dt_develop_t *dev, GHashTable *crs)
+{
+  if(!dev || !crs) return FALSE;
+  char imported[256] = { 0 };
+  int n = 0;
+  return _lightspeed_develop(dev, dev->image_storage.id, crs, imported, sizeof(imported), &n, TRUE);
+}
+
+static void _put(GHashTable *out, const char *key, const float v, const int digits)
+{
+  g_hash_table_replace(out, g_strdup(key), g_strdup_printf("%.*f", digits, fabsf(v) < 1e-4f ? 0.0f : v));
+}
+
+// inverse of _lr_hue_to_dt
+static float _dt_hue_to_lr(const float dt_hue)
+{
+  float best = 0.0f, err = FLT_MAX;
+  for(int h = 0; h < 360; h++)
+  {
+    float e = fabsf(_lr_hue_to_dt((float)h) - dt_hue);
+    e = fminf(e, 360.0f - e);
+    if(e < err)
+    {
+      err = e;
+      best = h;
+    }
+  }
+  return best;
+}
+
+GHashTable *dt_lightroom_read_develop(dt_develop_t *dev)
+{
+  GHashTable *out = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  if(!dev || !dev->iop) return out;
+
+  static const struct { dt_lsb_id_t id; const char *key; int digits; } basic[] =
+  {
+    { DT_LSB_TEMP, "Temperature", 0 },     { DT_LSB_TINT, "Tint", 0 },
+    { DT_LSB_EXPOSURE, "Exposure2012", 2 }, { DT_LSB_CONTRAST, "Contrast2012", 0 },
+    { DT_LSB_HIGHLIGHTS, "Highlights2012", 0 }, { DT_LSB_SHADOWS, "Shadows2012", 0 },
+    { DT_LSB_WHITES, "Whites2012", 0 },     { DT_LSB_BLACKS, "Blacks2012", 0 },
+    { DT_LSB_TEXTURE, "Texture", 0 },       { DT_LSB_CLARITY, "Clarity2012", 0 },
+    { DT_LSB_DEHAZE, "Dehaze", 0 },         { DT_LSB_VIBRANCE, "Vibrance", 0 },
+    { DT_LSB_SATURATION, "Saturation", 0 },
+  };
+  for(int k = 0; k < G_N_ELEMENTS(basic); k++)
+  {
+    const dt_lsb_control_t *c = dt_lsb_control(basic[k].id);
+    _put(out, basic[k].key, dt_lsb_read(dt_lsb_find_module(dev->iop, c), c), basic[k].digits);
+  }
+
+  dt_iop_module_t *m = _lr_instance(dev, "channelmixerrgb", NULL);
+  if(m)
+  {
+    // the white balance of the camera: the defaults of the module
+    float t = 5003.0f, tint = 0.0f;
+    void *params = m->params;
+    m->params = m->default_params;
+    const gboolean ok = dt_lsb_wb_read(m, &t, &tint);
+    m->params = params;
+    if(ok)
+    {
+      _put(out, "AsShotTemperature", t, 0);
+      _put(out, "AsShotTint", tint, 0);
+    }
+  }
+  if(m && m->enabled && m->so->get_p)
+  {
+    const float *grey = m->so->get_p(m->params, "grey");
+    g_hash_table_replace(out, g_strdup("ConvertToGrayscale"),
+                         g_strdup(grey && (grey[0] != 0.0f || grey[1] != 0.0f || grey[2] != 0.0f)
+                                  ? "True" : "False"));
+  }
+
+  static const char *lr_colors[8] =
+    { "Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta" };
+  static const char *dt_colors[8] =
+    { "red", "orange", "yellow", "green", "cyan", "blue", "lavender", "magenta" };
+  m = _lr_instance(dev, "colorequal", NULL);
+  const gboolean eq = m && m->enabled && m->so->get_p;
+  for(int k = 0; k < 8; k++)
+  {
+    char key[64], field[64];
+    float h = 0.0f, s = 0.0f, l = 0.0f;
+    if(eq)
+    {
+      snprintf(field, sizeof(field), "hue_%s", dt_colors[k]);
+      const float *f = m->so->get_p(m->params, field);
+      if(f) h = *f / 0.3f;
+      snprintf(field, sizeof(field), "sat_%s", dt_colors[k]);
+      f = m->so->get_p(m->params, field);
+      if(f) s = (*f - 1.0f) * 100.0f;
+      snprintf(field, sizeof(field), "bright_%s", dt_colors[k]);
+      f = m->so->get_p(m->params, field);
+      if(f) l = (*f - 1.0f) / 0.004f;
+    }
+    snprintf(key, sizeof(key), "HueAdjustment%s", lr_colors[k]);
+    _put(out, key, h, 0);
+    snprintf(key, sizeof(key), "SaturationAdjustment%s", lr_colors[k]);
+    _put(out, key, s, 0);
+    snprintf(key, sizeof(key), "LuminanceAdjustment%s", lr_colors[k]);
+    _put(out, key, l, 0);
+  }
+
+  static const struct { const char *hue, *sat, *H, *C; } grading[] =
+  {
+    { "SplitToningShadowHue", "SplitToningShadowSaturation", "shadows_H", "shadows_C" },
+    { "SplitToningHighlightHue", "SplitToningHighlightSaturation", "highlights_H", "highlights_C" },
+    { "ColorGradeMidtoneHue", "ColorGradeMidtoneSat", "midtones_H", "midtones_C" },
+    { "ColorGradeGlobalHue", "ColorGradeGlobalSat", "global_H", "global_C" },
+  };
+  m = _lr_instance(dev, "colorbalancergb", NULL);
+  const gboolean cb = m && m->enabled && m->so->get_p;
+  for(int k = 0; k < G_N_ELEMENTS(grading); k++)
+  {
+    float hue = 0.0f, sat = 0.0f;
+    if(cb)
+    {
+      const float *H = m->so->get_p(m->params, grading[k].H);
+      const float *C = m->so->get_p(m->params, grading[k].C);
+      if(C) sat = *C / 0.3f * 100.0f;
+      if(H && sat > 0.5f) hue = _dt_hue_to_lr(*H);
+    }
+    _put(out, grading[k].hue, hue, 0);
+    _put(out, grading[k].sat, sat, 0);
+  }
+  return out;
 }
 
 gboolean dt_lightroom_import_xmp_buffer(const dt_imgid_t imgid,

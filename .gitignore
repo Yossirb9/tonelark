@@ -28,3 +28,4 @@ workspace/
 cmake-build-debug/
 .idea/
 packaging/windows/lightspeed_openwith.iss
+__pycache__/

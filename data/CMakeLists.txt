@@ -144,7 +144,7 @@ install(FILES lightspeed/guide.html DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc
 # Lightspeed AI helper and its models (the Python runtime is added by
 # packaging/windows/bundle_python.py)
 #
-install(FILES lightspeed/ai/lsai.py DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/lightspeed/ai COMPONENT DTApplication)
+install(FILES lightspeed/ai/lsai.py lightspeed/ai/lsedit.py lightspeed/ai/lsmcp.py DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/lightspeed/ai COMPONENT DTApplication)
 install(DIRECTORY lightspeed/ai/models DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/lightspeed/ai COMPONENT DTApplication)
 
 #

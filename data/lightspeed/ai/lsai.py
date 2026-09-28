@@ -12,6 +12,13 @@ vision or an AI model:
             aligned and blended into one image
   genedit   generative edit of a region with Codex's image model, only the
             region is blended back into the full resolution image
+  autoedit  edit with words: the model looks at the photo(s) and answers with
+            Lightroom settings, applied by Lightspeed as a normal edit
+  match     Match Look: exposure and white balance of photos matched to a
+            reference photo (on this computer)
+  keywords  keywords, title and caption of photos on contact sheets
+  crop      crop and straighten suggestions
+  mcp       connect Claude Code / Codex / Gemini chats to Lightspeed (MCP)
   providers which command line AI tools are installed and logged in
 
     python lsai.py <command> <request.json> <response.json>
@@ -30,6 +37,10 @@ import time
 
 import numpy as np
 import cv2
+
+# the embeddable Python does not look next to the script
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lsedit  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, 'models')
@@ -522,7 +533,7 @@ def extract_json(text):
     raise ValueError('no JSON in the answer: ' + text[:200])
 
 
-def make_sheet(paths, out, cols=4, cell=520):
+def make_sheet(paths, out, cols=4, cell=520, labels=None):
     rows = (len(paths) + cols - 1) // cols
     sheet = np.full((rows * cell, cols * cell, 3), 24, np.uint8)
     for k, p in enumerate(paths):
@@ -534,7 +545,7 @@ def make_sheet(paths, out, cols=4, cell=520):
         sheet[y0:y0 + h, x0:x0 + w] = img
         # the number, big and yellow, top left of the cell
         lx, ly = (k % cols) * cell + 8, (k // cols) * cell + 8
-        label = str(k + 1)
+        label = labels[k] if labels else str(k + 1)
         tw = 30 * len(label) + 22
         cv2.rectangle(sheet, (lx, ly), (lx + tw, ly + 50), (0, 210, 255), -1)
         cv2.putText(sheet, label, (lx + 10, ly + 40), cv2.FONT_HERSHEY_DUPLEX, 1.4, (0, 0, 0), 3, cv2.LINE_AA)
@@ -826,8 +837,427 @@ def cmd_genedit(req):
     return dict(output=req['output'], seconds=round(time.time() - t0, 1), generated=res_path)
 
 
+
+# ---------------------------------------------------------------------------
+# edit with words
+
+AUTOEDIT_ONE = """You are a professional photo retoucher working with Lightroom sliders. The image {name} is a photo as it looks now.
+Its current settings: {current}
+The photographer asks: "{request}"
+Choose Lightroom settings that do this with a natural, professional result: keep skin tones natural, do not clip highlights or crush blacks unless asked, and keep the white balance believable.
+Settings you can use (values are absolute, not added to the current ones; only give the ones that change):
+{vocabulary}
+Answer with JSON only, no other text:
+{{"settings": {{"Exposure": 0.2, "Temperature": 5800}}, "summary": "what you did, max 15 words"}}"""
+
+AUTOEDIT_REFINE = """You edited a photo for the request "{request}". The image {name} shows the result.
+The settings now: {current}
+Look at the result critically, as a professional retoucher: exposure, white balance, skin tones, clipped highlights or blacks, too much or too little of what was asked.
+If it can be better, give the settings that change (absolute values, only the ones that change). If it is good, give an empty "settings".
+Settings you can use:
+{vocabulary}
+Answer with JSON only, no other text:
+{{"settings": {{}}, "summary": "what you changed or why it is good, max 15 words"}}"""
+
+AUTOEDIT_SHEET = """The image {sheet} is a contact sheet of {n} photos, each marked with a yellow number (1 to {n}).
+{reference}The photographer asks for these photos: "{request}"
+Give every photo its own Lightroom settings to do this: the photos differ in light, so adapt exposure and white balance to each one, and keep the look consistent across the set. Keep skin tones natural and do not clip highlights.
+Current settings of each photo:
+{current}
+Settings you can use (values are absolute, not added to the current ones; only give the ones that change):
+{vocabulary}
+Answer with JSON only, no other text:
+{{"photos":[{{"n":1,"settings":{{"Exposure":0.3}},"summary":"max 10 words"}}]}}"""
+
+MATCH_REQUEST = ("make each numbered photo match the look of the reference photo R (brightness, contrast, "
+                 "color, white balance, mood). They already have its settings: give the corrections that "
+                 "still make them look like one set")
+
+
+def _settings_of(answer):
+    d = extract_json(answer)
+    return d.get('settings') or {}, str(d.get('summary', ''))[:200]
+
+
+def cmd_autoedit(req):
+    images = req['images']
+    provider = req.get('provider', 'claude')
+    model = req.get('model', '')
+    timeout = int(req.get('timeout', 600))
+    request = (req.get('instruction') or '').strip() or \
+        'a clean, balanced professional edit that makes this photo look its best'
+    work = tempfile.mkdtemp(prefix='lsai_edit_')
+    results, errors = [], []
+
+    if len(images) == 1 and not req.get('reference'):
+        im = images[0]
+        current = im.get('settings') or {}
+        name = 'photo.jpg'
+        shutil.copyfile(im['path'], os.path.join(work, name))
+        prompt = (AUTOEDIT_REFINE if req.get('round', 1) > 1 else AUTOEDIT_ONE).format(
+            name=name, current=json.dumps(lsedit.friendly(current)), request=request,
+            vocabulary=lsedit.VOCABULARY)
+        progress(0.1, 'asking %s' % provider)
+        answer = ask_model(provider, prompt, [os.path.join(work, name)], work, model, timeout)
+        settings, summary = _settings_of(answer)
+        results.append(dict(id=im['id'], edit=lsedit.to_crs(settings, current), summary=summary))
+    else:
+        per = int(req.get('per_sheet', 12))
+        ref = req.get('reference')
+        # the reference takes the first cell of every sheet
+        if ref:
+            per = max(1, per - 1)
+        sheets = [images[k:k + per] for k in range(0, len(images), per)]
+
+        def one_sheet(k):
+            chunk = sheets[k]
+            name = 'sheet_%d.jpg' % (k + 1)
+            paths = [im['path'] for im in chunk]
+            labels = [str(i + 1) for i in range(len(chunk))]
+            if ref:
+                paths = [ref['path']] + paths
+                labels = ['R'] + labels
+            make_sheet(paths, os.path.join(work, name), labels=labels)
+            current = '\n'.join('%d: %s' % (i + 1, lsedit.compact(lsedit.friendly(im.get('settings') or {})))
+                                for i, im in enumerate(chunk))
+            rtext = ('Photo R (first) is the reference photo, already edited the way the photographer wants; '
+                     'do not give settings for it.\n') if ref else ''
+            prompt = AUTOEDIT_SHEET.format(sheet=name, n=len(chunk), request=request, current=current,
+                                           reference=rtext, vocabulary=lsedit.VOCABULARY)
+            answer = ask_model(provider, prompt, [os.path.join(work, name)], work, model, timeout)
+            out = []
+            for r in extract_json(answer).get('photos', []):
+                try:
+                    n = int(r.get('n', 0))
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= n <= len(chunk):
+                    im = chunk[n - 1]
+                    out.append(dict(id=im['id'], edit=lsedit.to_crs(r.get('settings') or {}, im.get('settings')),
+                                    summary=str(r.get('summary', ''))[:200]))
+            return out
+
+        progress(0.02, 'asking %s: %d sheet(s)' % (provider, len(sheets)))
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        done = 0
+        with ThreadPoolExecutor(max_workers=max(1, min(3, len(sheets)))) as pool:
+            futures = {pool.submit(one_sheet, k): k for k in range(len(sheets))}
+            for f in as_completed(futures):
+                done += 1
+                try:
+                    results += f.result()
+                except Exception as e:     # noqa: BLE001
+                    errors.append(str(e)[:300])
+                    log('sheet %d: %s' % (futures[f] + 1, e))
+                progress(done / len(sheets), 'asking %s, %d/%d sheets answered' % (provider, done, len(sheets)))
+    shutil.rmtree(work, ignore_errors=True)
+    if not results and errors:
+        raise RuntimeError(errors[0])
+    progress(1.0, 'done')
+    return dict(images=results, errors=errors, provider=provider)
+
+
+# ---------------------------------------------------------------------------
+# Match Look (on this computer): the photos already have the settings of the
+# reference; their exposure and white balance are adapted to their own
+# light, as Lightroom's "Match Total Exposures" and a relative white balance
+
+def look(path):
+    """brightness of a rendered photo: log2 of the median linear luminance"""
+    img = to_float(imread(path, cv2.IMREAD_COLOR))
+    img, _ = downscale(img, 800)
+    lin = np.where(img <= 0.04045, img / 12.92, ((img + 0.055) / 1.055) ** 2.4)
+    y = 0.0722 * lin[:, :, 0] + 0.7152 * lin[:, :, 1] + 0.2126 * lin[:, :, 2]
+    ok = (y > 0.002) & (y < 0.97)
+    return float(np.median(np.log2(y[ok]))) if ok.sum() > 100 else float(np.log2(max(1e-4, y.mean())))
+
+
+def captured(exif):
+    """log2 of the light the camera captured (shutter x ISO / f-number^2), None if unknown"""
+    try:
+        t, n, iso = float(exif['exposure']), float(exif['aperture']), float(exif['iso'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if t <= 0 or n <= 0 or iso <= 0:
+        return None
+    return math.log2(t * iso / (n * n))
+
+
+def _mired(t):
+    return 1e6 / max(1000.0, float(t))
+
+
+def _as_shot(settings, t, tint):
+    """white balance of the camera (5003 K, 0 for photos that are not raw)"""
+    if settings.get('raw') is False:
+        return 5003.0, 0.0
+    return float(settings.get('AsShotTemperature') or t), float(settings.get('AsShotTint', tint))
+
+
+EV_RESPONSE = 1.2      # the median brightness of a rendering moves 1.2 EV per EV of exposure
+
+
+def cmd_match(req):
+    ref = req['reference']
+    rs = ref.get('settings') or {}
+    ref_exposure = float(rs.get('Exposure2012', 0.0))
+    ref_t = float(rs.get('Temperature', 5000.0))
+    ref_tint = float(rs.get('Tint', 0.0))
+    # what the reference got on top of its camera white balance (a photo that
+    # is not raw is already balanced: 5003 K, tint 0 leave it as it is)
+    shot_t, shot_tint = _as_shot(rs, ref_t, ref_tint)
+    d_mired = _mired(ref_t) - _mired(shot_t)
+    d_tint = ref_tint - shot_tint
+    ref_light = captured(ref.get('exif') or {})
+    ref_look = None
+    out = []
+    images = req['images']
+    for k, im in enumerate(images):
+        progress(k / max(1, len(images)), 'matching %d/%d' % (k + 1, len(images)))
+        before = im.get('before') or {}
+        edit, how = {}, ''
+        light = captured(im.get('exif') or {})
+        if ref_light is not None and light is not None and abs(ref_light - light) <= 2.5:
+            ev = ref_exposure + (ref_light - light)
+            how = 'camera settings'
+        else:
+            # no camera settings, or photos in very different light:
+            # the median brightness of the renderings
+            try:
+                if ref_look is None:
+                    ref_look = look(ref['path'])
+                ev = ref_exposure + lsedit.clamp((ref_look - look(im['path'])) / EV_RESPONSE, -1.5, 1.5)
+                how = 'brightness'
+            except Exception as e:     # noqa: BLE001
+                log('skip %s: %s' % (im.get('path'), e))
+                ev = ref_exposure
+        edit['Exposure2012'] = round(lsedit.clamp(ev, -5.0, 5.0), 2)
+        if abs(d_mired) > 0.5 or abs(d_tint) > 0.5:
+            base_t, base_tint = _as_shot(before, before.get('Temperature') or ref_t, before.get('Tint', 0.0))
+            t = lsedit.clamp(1e6 / max(40.0, _mired(base_t) + d_mired), 2000, 25000)
+            edit.update(lsedit.to_crs(dict(Temperature=t, Tint=float(base_tint) + d_tint), {}))
+        else:
+            # the reference keeps the white balance of its camera: every photo too
+            edit['WhiteBalance'] = 'As Shot'
+        out.append(dict(id=im['id'], edit=edit, how=how))
+    progress(1.0, 'done')
+    return dict(images=out)
+
+
+# ---------------------------------------------------------------------------
+# keywords, title and caption
+
+KEYWORDS_PROMPT = """The image {sheet} is a contact sheet of {n} photos, each marked with a yellow number (1 to {n}).
+For every photo write, in {language}:
+- "keywords": 5 to 12 keywords for a photo library: the subject, people (count, not names), the kind of place, the activity, the mood, main colors, season or time of day, the style of the photo. Lower case, no hashtags, no duplicates.
+{titles}Only describe what can be seen; do not guess names of people or exact places.
+Answer with JSON only, no other text:
+{{"photos":[{{"n":1,"keywords":["beach","sunset"]{example}}}]}}"""
+
+
+def cmd_keywords(req):
+    images = req['images']
+    provider = req.get('provider', 'claude')
+    per = int(req.get('per_sheet', 12))
+    language = req.get('language') or 'English'
+    titles = bool(req.get('titles', True))
+    work = tempfile.mkdtemp(prefix='lsai_kw_')
+    sheets = [images[k:k + per] for k in range(0, len(images), per)]
+
+    def one_sheet(k):
+        chunk = sheets[k]
+        name = 'sheet_%d.jpg' % (k + 1)
+        make_sheet([im['path'] for im in chunk], os.path.join(work, name))
+        ttext = ('- "title": a short title, max 6 words\n'
+                 '- "caption": one sentence that describes the photo, max 25 words\n') if titles else ''
+        prompt = KEYWORDS_PROMPT.format(sheet=name, n=len(chunk), language=language, titles=ttext,
+                                        example=',"title":"...","caption":"..."' if titles else '')
+        answer = ask_model(provider, prompt, [os.path.join(work, name)], work,
+                           req.get('model', ''), int(req.get('timeout', 600)))
+        out = []
+        for r in extract_json(answer).get('photos', []):
+            try:
+                n = int(r.get('n', 0))
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= len(chunk):
+                kws, seen = [], set()
+                for kw in r.get('keywords') or []:
+                    kw = str(kw).strip().strip('#').replace('|', ' ')[:60]
+                    if kw and kw.lower() not in seen:
+                        seen.add(kw.lower())
+                        kws.append(kw)
+                item = dict(id=chunk[n - 1]['id'], keywords=kws[:15])
+                if titles:
+                    item['title'] = str(r.get('title', '')).strip()[:120]
+                    item['caption'] = str(r.get('caption', '')).strip()[:400]
+                out.append(item)
+        return out
+
+    results, errors, done = [], [], 0
+    progress(0.02, 'asking %s: %d sheet(s)' % (provider, len(sheets)))
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=max(1, min(3, len(sheets)))) as pool:
+        futures = {pool.submit(one_sheet, k): k for k in range(len(sheets))}
+        for f in as_completed(futures):
+            done += 1
+            try:
+                results += f.result()
+            except Exception as e:     # noqa: BLE001
+                errors.append(str(e)[:300])
+                log('sheet %d: %s' % (futures[f] + 1, e))
+            progress(done / len(sheets), 'asking %s, %d/%d sheets answered' % (provider, done, len(sheets)))
+    shutil.rmtree(work, ignore_errors=True)
+    if not results and errors:
+        raise RuntimeError(errors[0])
+    progress(1.0, 'done')
+    return dict(images=results, errors=errors, provider=provider)
+
+
+# ---------------------------------------------------------------------------
+# crop suggestions
+
+CROP_PROMPT = """You are a professional photo editor. {what}
+Suggest the best crop for {each}: a stronger composition (rule of thirds or a clear center, balance, no distractions at the edges, room in front of a face or a moving subject), keeping what matters (do not cut heads, hands or feet awkwardly, keep the whole subject when it is small).
+{aspect}{straighten}Give the crop as percentages of the width and height of the photo as it is shown: left, top, right, bottom (0 to 100, from the top left corner). A photo that is best as it is gets 0, 0, 100, 100.
+Answer with JSON only, no other text:
+{{"photos":[{{"n":1,"left":8,"top":0,"right":92,"bottom":96,{angle}"reason":"max 10 words"}}]}}"""
+
+
+def cmd_crop(req):
+    images = req['images']
+    provider = req.get('provider', 'claude')
+    aspect = req.get('aspect') or 'original'
+    straighten = bool(req.get('straighten', True))
+    work = tempfile.mkdtemp(prefix='lsai_crop_')
+    if aspect == 'original':
+        atext = 'Keep the aspect ratio of the photo.\n'
+    elif aspect in lsedit.ASPECTS:
+        atext = 'The crop must have the aspect ratio %s (width:height).\n' % aspect
+    else:
+        atext = 'Any aspect ratio is fine.\n'
+    stext = ('If the horizon or lines that should be vertical are tilted, give "angle": the rotation in degrees '
+             'that levels them (positive = rotate clockwise, usually less than 5), else 0.\n') if straighten else ''
+    single = len(images) == 1
+    per = 1 if single else int(req.get('per_sheet', 9))
+    sheets = [images[k:k + per] for k in range(0, len(images), per)]
+
+    def one_sheet(k):
+        chunk = sheets[k]
+        if single:
+            name = 'photo.jpg'
+            shutil.copyfile(chunk[0]['path'], os.path.join(work, name))
+            what = 'The image %s is a photo (call it photo 1).' % name
+            each = 'it'
+        else:
+            name = 'sheet_%d.jpg' % (k + 1)
+            make_sheet([im['path'] for im in chunk], os.path.join(work, name), cols=3, cell=620)
+            what = ('The image %s is a contact sheet of %d photos, each marked with a yellow number (1 to %d).'
+                    % (name, len(chunk), len(chunk)))
+            each = 'every photo (the percentages are of that photo, not of the sheet)'
+        prompt = CROP_PROMPT.format(what=what, each=each, aspect=atext, straighten=stext,
+                                    angle='"angle":0,' if straighten else '')
+        answer = ask_model(provider, prompt, [os.path.join(work, name)], work,
+                           req.get('model', ''), int(req.get('timeout', 600)))
+        out = []
+        for r in extract_json(answer).get('photos', []):
+            try:
+                n = int(r.get('n', 0))
+                rect = [float(r.get(key, d)) / 100.0 for key, d in
+                        (('left', 0), ('top', 0), ('right', 100), ('bottom', 100))]
+            except (TypeError, ValueError):
+                continue
+            if 1 <= n <= len(chunk):
+                im = chunk[n - 1]
+                angle = None
+                if straighten:
+                    angle = lsedit.clamp(lsedit._num(r.get('angle')), -10.0, 10.0)
+                    if abs(angle) < 0.2:
+                        angle = 0.0
+                edit = lsedit.crop_edit(im['width'], im['height'], rect, aspect, im.get('settings'), angle)
+                out.append(dict(id=im['id'], edit=edit, rect=rect, angle=angle,
+                                reason=str(r.get('reason', ''))[:200]))
+        return out
+
+    results, errors, done = [], [], 0
+    progress(0.02, 'asking %s' % provider)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=max(1, min(3, len(sheets)))) as pool:
+        futures = {pool.submit(one_sheet, k): k for k in range(len(sheets))}
+        for f in as_completed(futures):
+            done += 1
+            try:
+                results += f.result()
+            except Exception as e:     # noqa: BLE001
+                errors.append(str(e)[:300])
+                log('sheet %d: %s' % (futures[f] + 1, e))
+            progress(done / len(sheets), 'asking %s, %d/%d answered' % (provider, done, len(sheets)))
+    shutil.rmtree(work, ignore_errors=True)
+    if not results and errors:
+        raise RuntimeError(errors[0])
+    progress(1.0, 'done')
+    return dict(images=results, errors=errors, provider=provider)
+
+
+# ---------------------------------------------------------------------------
+# chats: register the Lightspeed MCP server in the AI tools
+
+def _codex_auto_approve():
+    """the Lightspeed tools work on the user's own photos, with undo: Codex
+    runs them without asking every time"""
+    path = os.path.join(os.environ.get('CODEX_HOME') or os.path.join(os.path.expanduser('~'), '.codex'),
+                        'config.toml')
+    try:
+        with open(path, encoding='utf-8') as f:
+            lines = f.read().split('\n')
+    except OSError:
+        return
+    out, section = [], False
+    for line in lines:
+        if line.strip().startswith('['):
+            section = line.strip() == '[mcp_servers.lightspeed]'
+            out.append(line)
+            if section:
+                out.append('default_tools_approval_mode = "approve"')
+            continue
+        if section and line.strip().startswith('default_tools_approval_mode'):
+            continue
+        out.append(line)
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        f.write('\n'.join(out))
+
+
+def cmd_mcp(req):
+    python = sys.executable
+    server = os.path.join(HERE, 'lsmcp.py')
+    out = {}
+    for tool in ('claude', 'codex', 'gemini'):
+        exe = _which(tool)
+        if not exe:
+            out[tool] = 'not installed'
+            continue
+        progress(0.3, 'connecting %s' % tool)
+        if tool == 'claude':
+            remove = [exe, 'mcp', 'remove', '-s', 'user', 'lightspeed']
+            add = [exe, 'mcp', 'add', '-s', 'user', 'lightspeed', '--', python, server]
+        elif tool == 'codex':
+            remove = [exe, 'mcp', 'remove', 'lightspeed']
+            add = [exe, 'mcp', 'add', 'lightspeed', '--', python, server]
+        else:
+            remove = [exe, 'mcp', 'remove', '-s', 'user', 'lightspeed']
+            add = [exe, 'mcp', 'add', '-s', 'user', 'lightspeed', python, server]
+        _status(remove, 60)
+        rc, text = _status(add, 60)
+        if rc == 0 and tool == 'codex':
+            _codex_auto_approve()
+        out[tool] = 'connected' if rc == 0 else ('error: ' + text.strip()[-300:])
+    progress(1.0, 'done')
+    return dict(tools=out, python=python, server=server)
+
+
 COMMANDS = dict(cull=cmd_cull, rate=cmd_rate, besttake=cmd_besttake, genedit=cmd_genedit,
-                providers=cmd_providers)
+                providers=cmd_providers, autoedit=cmd_autoedit, match=cmd_match, keywords=cmd_keywords,
+                crop=cmd_crop, mcp=cmd_mcp)
 
 
 def main():

@@ -19,6 +19,14 @@
 #include "common/lightspeed_ai.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
+#include "common/history.h"
+#include "common/history_snapshot.h"
+#include "common/math.h"
+#include "common/tags.h"
+#include "common/undo.h"
+#include "develop/develop.h"
+#include "develop/lightroom.h"
+#include "views/view.h"
 #include "common/file_location.h"
 #include "common/film.h"
 #include "common/grouping.h"
@@ -352,6 +360,365 @@ dt_imgid_t dt_lsai_import_derived(const dt_imgid_t source, const char *path)
     dt_grouping_add_to_group(group, id);
   }
   return id;
+}
+
+// ---------------------------------------------------------------------------
+// edits
+
+typedef struct _gui_call_t
+{
+  GSourceFunc func;
+  gpointer data;
+  gboolean done;
+  GMutex lock;
+  GCond cond;
+} _gui_call_t;
+
+static gboolean _gui_call_run(gpointer p)
+{
+  _gui_call_t *c = p;
+  c->func(c->data);
+  g_mutex_lock(&c->lock);
+  c->done = TRUE;
+  g_cond_signal(&c->cond);
+  g_mutex_unlock(&c->lock);
+  return G_SOURCE_REMOVE;
+}
+
+void dt_lsai_in_gui(GSourceFunc func, gpointer data)
+{
+  if(!darktable.control || pthread_equal(pthread_self(), darktable.control->gui_thread))
+  {
+    func(data);
+    return;
+  }
+  _gui_call_t c = { .func = func, .data = data, .done = FALSE };
+  g_mutex_init(&c.lock);
+  g_cond_init(&c.cond);
+  g_main_context_invoke(NULL, _gui_call_run, &c);
+  g_mutex_lock(&c.lock);
+  while(!c.done) g_cond_wait(&c.cond, &c.lock);
+  g_mutex_unlock(&c.lock);
+  g_mutex_clear(&c.lock);
+  g_cond_clear(&c.cond);
+}
+
+static gboolean _in_darkroom(const dt_imgid_t imgid)
+{
+  return dt_view_get_current() == DT_VIEW_DARKROOM && dt_dev_is_current_image(darktable.develop, imgid);
+}
+
+// first instance of a module in a develop
+static dt_iop_module_t *_instance(dt_develop_t *dev, const char *op)
+{
+  for(GList *l = dev->iop; l; l = g_list_next(l))
+  {
+    dt_iop_module_t *m = l->data;
+    if(dt_iop_module_is(m, op) && m->iop_order != INT_MAX) return m;
+  }
+  return NULL;
+}
+
+static float *_pf(dt_iop_module_t *m, void *params, const char *field)
+{
+  return m && m->so->get_p ? m->so->get_p(params, field) : NULL;
+}
+
+// size of the displayed image before the crop (the flip applied)
+static void _display_size(const dt_image_t *img, int *w, int *h)
+{
+  *w = img->p_width > 0 ? img->p_width : img->width;
+  *h = img->p_height > 0 ? img->p_height : img->height;
+  if(dt_image_orientation(img) & ORIENTATION_SWAP_XY)
+  {
+    const int t = *w;
+    *w = *h;
+    *h = t;
+  }
+}
+
+JsonObject *dt_lsai_read_edit(const dt_imgid_t imgid)
+{
+  JsonObject *o = json_object_new();
+  dt_develop_t dev;
+  dt_dev_init(&dev, FALSE);
+  dt_dev_load_image(&dev, imgid);
+  // the modules with the parameters of the history
+  dt_dev_pop_history_items_ext(&dev, dev.history_end);
+
+  GHashTable *crs = dt_lightroom_read_develop(&dev);
+  GHashTableIter it;
+  gpointer key, value;
+  g_hash_table_iter_init(&it, crs);
+  while(g_hash_table_iter_next(&it, &key, &value))
+  {
+    char *end = NULL;
+    const double v = g_ascii_strtod(value, &end);
+    if(end && *end == '\0' && end != value)
+      json_object_set_double_member(o, key, v);
+    else
+      json_object_set_string_member(o, key, value);
+  }
+  g_hash_table_destroy(crs);
+
+  json_object_set_boolean_member(o, "raw", dt_image_is_raw(&dev.image_storage));
+  int w = 0, h = 0;
+  _display_size(&dev.image_storage, &w, &h);
+  json_object_set_int_member(o, "width", w);
+  json_object_set_int_member(o, "height", h);
+
+  float l = 0.0f, t = 0.0f, r = 1.0f, b = 1.0f, angle = 0.0f;
+  dt_iop_module_t *crop = _instance(&dev, "crop");
+  if(crop && crop->enabled)
+  {
+    float *f;
+    if((f = _pf(crop, crop->params, "cx"))) l = *f;
+    if((f = _pf(crop, crop->params, "cy"))) t = *f;
+    if((f = _pf(crop, crop->params, "cw"))) r = *f;
+    if((f = _pf(crop, crop->params, "ch"))) b = *f;
+  }
+  dt_iop_module_t *ashift = _instance(&dev, "ashift");
+  if(ashift && ashift->enabled)
+  {
+    float *f = _pf(ashift, ashift->params, "rotation");
+    if(f) angle = *f;
+  }
+  json_object_set_double_member(o, "CropLeft", l);
+  json_object_set_double_member(o, "CropTop", t);
+  json_object_set_double_member(o, "CropRight", r);
+  json_object_set_double_member(o, "CropBottom", b);
+  json_object_set_double_member(o, "Straighten", angle);
+  dt_dev_cleanup(&dev);
+  return o;
+}
+
+static gboolean _member_float(JsonObject *o, const char *key, float *v)
+{
+  JsonNode *n = json_object_get_member(o, key);
+  if(!n || !JSON_NODE_HOLDS_VALUE(n)) return FALSE;
+  const GType t = json_node_get_value_type(n);
+  if(t == G_TYPE_STRING)
+  {
+    char *end = NULL;
+    const char *s = json_node_get_string(n);
+    *v = g_ascii_strtod(s, &end);
+    return end != s;
+  }
+  *v = json_node_get_double(n);
+  return TRUE;
+}
+
+// crop (normalized rectangle of the displayed image, crop module) and
+// straighten (rotate and perspective, cropped to the original format)
+static gboolean _apply_crop(dt_develop_t *dev, JsonObject *edit)
+{
+  gboolean changed = FALSE;
+  float angle = 0.0f;
+  if(_member_float(edit, "Straighten", &angle))
+  {
+    dt_iop_module_t *m = _instance(dev, "ashift");
+    if(m && (fabsf(angle) > 0.01f || m->enabled))
+    {
+      if(!m->enabled) memcpy(m->params, m->default_params, m->params_size);
+      float *rotation = _pf(m, m->params, "rotation");
+      int *cropmode = (int *)_pf(m, m->params, "cropmode");
+      float *cl = _pf(m, m->params, "cl"), *cr = _pf(m, m->params, "cr");
+      float *ct = _pf(m, m->params, "ct"), *cb = _pf(m, m->params, "cb");
+      if(rotation && cropmode && cl && cr && ct && cb)
+      {
+        *rotation = CLAMP(angle, -45.0f, 45.0f);
+        // the largest rectangle of the original format inside the rotated
+        // image (the module computes it in its gui only)
+        const float W = dev->image_storage.p_width > 0 ? dev->image_storage.p_width : dev->image_storage.width;
+        const float H = dev->image_storage.p_height > 0 ? dev->image_storage.p_height : dev->image_storage.height;
+        const float a = fabsf(*rotation) * M_PI_F / 180.0f;
+        const float c = cosf(a), s = sinf(a);
+        const float BW = W * c + H * s, BH = W * s + H * c;
+        const float k = fminf(W / BW, H / BH);
+        *cropmode = 2;   // original format
+        *cl = 0.5f - k * W / (2.0f * BW);
+        *cr = 1.0f - *cl;
+        *ct = 0.5f - k * H / (2.0f * BH);
+        *cb = 1.0f - *ct;
+        m->enabled = TRUE;
+        dt_dev_add_history_item_ext(dev, m, TRUE, TRUE);
+        changed = TRUE;
+      }
+    }
+  }
+
+  float l = 0.0f, t = 0.0f, r = 1.0f, b = 1.0f;
+  if(_member_float(edit, "CropLeft", &l) && _member_float(edit, "CropTop", &t)
+     && _member_float(edit, "CropRight", &r) && _member_float(edit, "CropBottom", &b))
+  {
+    dt_iop_module_t *m = _instance(dev, "crop");
+    l = CLAMP(l, 0.0f, 0.95f);
+    t = CLAMP(t, 0.0f, 0.95f);
+    r = CLAMP(r, l + 0.05f, 1.0f);
+    b = CLAMP(b, t + 0.05f, 1.0f);
+    const gboolean full = l < 1e-3f && t < 1e-3f && r > 0.999f && b > 0.999f;
+    if(m && (!full || m->enabled))
+    {
+      if(!m->enabled) memcpy(m->params, m->default_params, m->params_size);
+      float *cx = _pf(m, m->params, "cx"), *cy = _pf(m, m->params, "cy");
+      float *cw = _pf(m, m->params, "cw"), *ch = _pf(m, m->params, "ch");
+      int *rn = (int *)_pf(m, m->params, "ratio_n"), *rd = (int *)_pf(m, m->params, "ratio_d");
+      if(cx && cy && cw && ch)
+      {
+        *cx = l;
+        *cy = t;
+        *cw = r;
+        *ch = b;
+        // free aspect: the crop tool shows the rectangle as it is
+        if(rn) *rn = 0;
+        if(rd) *rd = 0;
+        m->enabled = !full;
+        dt_dev_add_history_item_ext(dev, m, m->enabled, TRUE);
+        changed = TRUE;
+      }
+    }
+  }
+  return changed;
+}
+
+static void _after_change(const dt_imgid_t imgid)
+{
+  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
+  guint tagid = 0;
+  dt_tag_new("darktable|changed", &tagid);
+  dt_tag_attach(tagid, imgid, FALSE, FALSE);
+  dt_image_cache_set_change_timestamp(imgid);
+  dt_mipmap_cache_remove(imgid);
+  dt_image_update_final_size(imgid);
+  dt_image_synch_xmp(imgid);
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, imgid);
+}
+
+static const char *_crop_keys[] = { "CropLeft", "CropTop", "CropRight", "CropBottom", "Straighten",
+                                    "raw", "width", "height", NULL };
+
+static gboolean _apply_edit_db(const dt_imgid_t imgid, JsonObject *edit)
+{
+  // Lightroom settings: every member but the crop, as text
+  GHashTable *crs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GList *members = json_object_get_members(edit);
+  for(GList *l = members; l; l = g_list_next(l))
+  {
+    const char *key = l->data;
+    if(g_strv_contains((const gchar *const *)_crop_keys, key)) continue;
+    JsonNode *n = json_object_get_member(edit, key);
+    if(!n || !JSON_NODE_HOLDS_VALUE(n)) continue;
+    const GType t = json_node_get_value_type(n);
+    gchar *text = NULL;
+    if(t == G_TYPE_STRING)
+      text = g_strdup(json_node_get_string(n));
+    else if(t == G_TYPE_BOOLEAN)
+      text = g_strdup(json_node_get_boolean(n) ? "True" : "False");
+    else
+    {
+      char buf[G_ASCII_DTOSTR_BUF_SIZE];
+      text = g_strdup(g_ascii_dtostr(buf, sizeof(buf), json_node_get_double(n)));
+    }
+    g_hash_table_replace(crs, g_strdup(key), text);
+  }
+  g_list_free(members);
+
+  dt_develop_t dev;
+  dt_dev_init(&dev, FALSE);
+  dt_dev_load_image(&dev, imgid);
+  // the modules with the parameters of the history
+  dt_dev_pop_history_items_ext(&dev, dev.history_end);
+  gboolean changed = g_hash_table_size(crs) > 0 && dt_lightroom_update_develop(&dev, crs);
+  changed |= _apply_crop(&dev, edit);
+  if(changed) dt_dev_write_history(&dev);
+  dt_dev_cleanup(&dev);
+  g_hash_table_destroy(crs);
+
+  if(changed) _after_change(imgid);
+  return changed;
+}
+
+typedef struct _edit_call_t
+{
+  dt_imgid_t imgid, src;
+  JsonObject *edit;
+  gboolean ok;
+} _edit_call_t;
+
+static gboolean _copy_db(const dt_imgid_t src, const dt_imgid_t dst)
+{
+  // the whole look, not what belongs to one photo
+  static const char *skip[] = { "crop", "ashift", "clipping", "flip", "retouch", "spots", "liquify",
+                                "rawprepare", "mask_manager", NULL };
+  GList *ops = NULL;
+  GList *items = dt_history_get_items(src, FALSE, FALSE, FALSE);
+  for(GList *l = items; l; l = g_list_next(l))
+  {
+    const dt_history_item_t *item = l->data;
+    if(!g_strv_contains((const gchar *const *)skip, item->op))
+      ops = g_list_append(ops, GUINT_TO_POINTER(item->num));
+  }
+  g_list_free_full(items, dt_history_item_free);
+  if(!ops) return FALSE;
+  dt_history_copy_and_paste_on_image(src, dst, TRUE, ops, FALSE, FALSE, TRUE);
+  g_list_free(ops);
+  return TRUE;
+}
+
+static gboolean _edit_darkroom(gpointer data)
+{
+  _edit_call_t *c = data;
+  // what is still in the darkroom goes to the database first
+  dt_dev_write_history(darktable.develop);
+  dt_dev_undo_start_record(darktable.develop);
+  c->ok = c->edit ? _apply_edit_db(c->imgid, c->edit) : _copy_db(c->src, c->imgid);
+  // the darkroom takes the new history (a paste reloads it itself)
+  if(c->ok && c->edit && dt_dev_is_current_image(darktable.develop, c->imgid))
+  {
+    dt_dev_reload_history_items(darktable.develop);
+    dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
+  }
+  dt_dev_undo_end_record(darktable.develop);
+  return G_SOURCE_REMOVE;
+}
+
+gboolean dt_lsai_apply_edit(const dt_imgid_t imgid, JsonObject *edit)
+{
+  if(!dt_is_valid_imgid(imgid) || !edit) return FALSE;
+
+  _edit_call_t c = { .imgid = imgid, .edit = edit, .ok = FALSE };
+  if(_in_darkroom(imgid))
+  {
+    dt_lsai_in_gui(_edit_darkroom, &c);
+    return c.ok;
+  }
+
+  dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
+  hist->imgid = imgid;
+  dt_history_snapshot_undo_create(imgid, &hist->before, &hist->before_history_end);
+  c.ok = _apply_edit_db(imgid, edit);
+  if(!c.ok)
+  {
+    dt_history_snapshot_undo_lt_history_data_free(hist);
+    return FALSE;
+  }
+  dt_history_snapshot_undo_create(imgid, &hist->after, &hist->after_history_end);
+  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
+  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
+                 dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
+  dt_undo_end_group(darktable.undo);
+  return TRUE;
+}
+
+gboolean dt_lsai_copy_edit(const dt_imgid_t src, const dt_imgid_t dst)
+{
+  if(!dt_is_valid_imgid(src) || !dt_is_valid_imgid(dst) || src == dst) return FALSE;
+  _edit_call_t c = { .imgid = dst, .src = src, .edit = NULL, .ok = FALSE };
+  if(_in_darkroom(dst) || _in_darkroom(src))
+    dt_lsai_in_gui(_edit_darkroom, &c);
+  else
+    c.ok = _copy_db(src, dst);   // with its own undo
+  return c.ok;
 }
 
 // ---------------------------------------------------------------------------

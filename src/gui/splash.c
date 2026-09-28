@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/lightspeed_version.h"
 #include "control/conf.h"
 #include "gui/gtk.h"
 #include "dtgtk/button.h"
@@ -119,11 +120,8 @@ void dt_splash_screen_create(const gboolean force)
   gtk_widget_set_name(darktable.splash.progress_text, "splashscreen-progress");
   darktable.splash.remaining_text = gtk_label_new("");
   gtk_widget_set_name(darktable.splash.remaining_text, "splashscreen-remaining");
-  int version_len = strlen(darktable_package_version);
-  char *delim = strchr(darktable_package_version, '~');
-  if(delim)
-    version_len = delim - darktable_package_version;
-  gchar *version_str = g_strdup_printf("%.*s", version_len, darktable_package_version);
+  // Lightspeed's version, darktable's is in the about dialog
+  gchar *version_str = g_strdup(LIGHTSPEED_VERSION);
   GtkWidget *version = GTK_WIDGET(gtk_label_new(version_str));
   g_free(version_str);
   gtk_widget_set_name(version, "splashscreen-version");

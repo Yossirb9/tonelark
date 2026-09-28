@@ -34,7 +34,7 @@
 
 #define LSB_TEXTURE_INSTANCE "texture"
 
-// Lightroom tint units per CIE 1960 uv distance from the daylight/planckian locus
+// Lightroom tint units per CIE 1960 uv distance from the Planckian locus
 #define LSB_TINT_SCALE 3000.0f
 #define LSB_TEMP_MIN 2000.0f
 #define LSB_TEMP_MAX 25000.0f
@@ -262,19 +262,18 @@ static void _uv_to_xy(const float u, const float v, float *x, float *y)
   *y = 2.0f * v / d;
 }
 
-// point of the reference locus (daylight above 4000 K, black body below) in uv
+// point of the reference locus in uv: the black body (Planckian) locus, as
+// Adobe's temperature and tint (DNG SDK, Robertson isotherms)
 static void _locus_uv(const float T, float *u, float *v)
 {
   const float t = CLAMP(T, 1667.0f, LSB_TEMP_MAX);
   float x = 0.f, y = 0.f;
-  if(t >= 4000.0f)
-    CCT_to_xy_daylight(t, &x, &y);
-  else
-    CCT_to_xy_blackbody(t, &x, &y);
+  CCT_to_xy_blackbody(t, &x, &y);
   _xy_to_uv(x, y, u, v);
 }
 
-// unit normal of the locus at T, pointing to the magenta side (smaller v)
+// unit normal of the locus at T, pointing to the green side (larger v): as in
+// Lightroom a positive tint is a greenish light, the photo gets more magenta
 static void _locus_normal(const float T, float *nu, float *nv)
 {
   float u0, v0, u1, v1;
@@ -283,8 +282,8 @@ static void _locus_normal(const float T, float *nu, float *nv)
   const float tu = u1 - u0, tv = v1 - v0;
   const float n = sqrtf(tu * tu + tv * tv);
   *nu = n > 0.f ? -tv / n : 0.f;
-  *nv = n > 0.f ? tu / n : -1.f;
-  if(*nv > 0.f)
+  *nv = n > 0.f ? tu / n : 1.f;
+  if(*nv < 0.f)
   {
     *nu = -*nu;
     *nv = -*nv;

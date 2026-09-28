@@ -11,4 +11,4 @@
 #pragma once
 
 // the Lightspeed release, shown with the darktable version it is built on
-#define LIGHTSPEED_VERSION "1.1.1"
+#define LIGHTSPEED_VERSION "1.2.0"
