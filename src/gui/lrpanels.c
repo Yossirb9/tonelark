@@ -13,6 +13,7 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "dtgtk/button.h"
+#include "dtgtk/expander.h"
 #include "dtgtk/paint.h"
 #include "gui/gtk.h"
 
@@ -24,21 +25,52 @@ typedef struct _section_t
   const char *title;
   const char *ops[MAX_OPS];      // in display order
   const char *alts[8];           // develop tab: only when the photo uses them
+  gboolean top;                  // develop tab: above the basic panel
 } _section_t;
 
-// the Lightroom develop panels, in their order. a panel with one module shows
-// the module under the panel name, a panel with more has a menu header.
+// the develop panel of Lightroom Classic: the tools of the tool strip (crop,
+// remove) above the basic panel, then the panels in their order. A panel shows
+// the controls of its modules at once, without their headers; a module per
+// function of the panel (Lightroom's white balance is in the basic panel, its
+// red eye and masking tools have no module: the masks of each module do that).
 static const _section_t _develop[] =
 {
+  { "crop",        N_("Crop"),             { "crop" },                      { "clipping" }, TRUE },
+  { "remove",      N_("Remove"),           { "retouch" },                   { "spots" }, TRUE },
   { "tonecurve",   N_("Tone Curve"),       { "rgbcurve" },                  { "tonecurve" } },
   { "hsl",         N_("HSL / Color"),      { "colorequal" },                { "colorzones" } },
   { "grading",     N_("Color Grading"),    { "colorbalancergb" },           { "splittoning" } },
   { "detail",      N_("Detail"),           { "sharpen", "denoiseprofile" }, { "nlmeans", "diffuse" } },
   { "lens",        N_("Lens Corrections"), { "lens", "cacorrectrgb" },      { "cacorrect", "defringe" } },
-  { "transform",   N_("Transform"),        { "ashift", "crop", "flip" },    { "clipping" } },
+  { "transform",   N_("Transform"),        { "ashift" },                    { NULL } },
   { "effects",     N_("Effects"),          { "vignette", "grain" },         { NULL } },
-  { "calibration", N_("Calibration"),      { "channelmixerrgb" },           { NULL } },
-  { "healing",     N_("Healing"),          { "retouch" },                   { "spots" } },
+  { "calibration", N_("Calibration"),      { "primaries" },                 { NULL } },
+};
+
+// the headings of the modules in a panel with several (as the sections of the
+// Lightroom panels: Detail has Sharpening and Noise Reduction)
+static const struct { const char *op, *caption; } _captions[] =
+{
+  { "crop",            N_("Crop") },
+  { "clipping",        N_("Crop (classic)") },
+  { "retouch",         N_("Heal, clone and fill") },
+  { "spots",           N_("Spot removal (classic)") },
+  { "rgbcurve",        N_("Point Curve") },
+  { "tonecurve",       N_("Point Curve (classic)") },
+  { "colorequal",      N_("HSL") },
+  { "colorzones",      N_("Color Zones") },
+  { "colorbalancergb", N_("Color Grading") },
+  { "splittoning",     N_("Split Toning (classic)") },
+  { "sharpen",         N_("Sharpening") },
+  { "denoiseprofile",  N_("Noise Reduction") },
+  { "nlmeans",         N_("Noise Reduction (astro)") },
+  { "diffuse",         N_("Diffuse or Sharpen") },
+  { "lens",            N_("Profile Corrections") },
+  { "cacorrectrgb",    N_("Remove Chromatic Aberration") },
+  { "cacorrect",       N_("Remove Chromatic Aberration (raw)") },
+  { "defringe",        N_("Defringe") },
+  { "vignette",        N_("Post-Crop Vignetting") },
+  { "grain",           N_("Grain") },
 };
 
 // every module, in menus by task. modules that are in no menu go to "other".
@@ -103,8 +135,8 @@ static const struct { const char *op, *title; } _titles[] =
   { "clipping",        N_("Crop (classic)") },
   { "vignette",        N_("Vignette") },
   { "grain",           N_("Grain") },
-  { "channelmixerrgb", N_("Calibration") },
-  { "retouch",         N_("Healing") },
+  { "primaries",       N_("Calibration") },
+  { "retouch",         N_("Remove") },
   { "spots",           N_("Spot Removal (classic)") },
   { "hazeremoval",     N_("Dehaze") },
   { "shadhi",          N_("Shadows & Highlights") },
@@ -115,6 +147,7 @@ static const struct { const char *op, *title; } _titles[] =
 // the menu headers of the right panel, [tab][section]
 static GtkWidget *_headers[DT_LRP_TABS][G_N_ELEMENTS(_tools)];
 static int _tab = -1;
+static int _shown_tab = -1;     // the tab laid out since entering the darkroom
 
 gboolean dt_lrp_names(void)
 {
@@ -265,6 +298,22 @@ static gboolean _header_clicked(GtkWidget *w, GdkEventButton *e, gpointer data)
   return TRUE;
 }
 
+static GList *_section_modules(const int tab, const int s);
+
+static gboolean _reset_clicked(GtkWidget *w, GdkEventButton *e, gpointer data)
+{
+  if(e->button != 1) return FALSE;
+  const int tab = GPOINTER_TO_INT(data) / 100, s = GPOINTER_TO_INT(data) % 100;
+  GList *modules = _section_modules(tab, s);
+  for(const GList *m = modules; m; m = g_list_next(m))
+  {
+    dt_iop_module_t *module = m->data;
+    if(module->enabled || _in_history(module)) dt_iop_gui_reset_module(module);
+  }
+  g_list_free(modules);
+  return TRUE;
+}
+
 static GtkWidget *_header(const int tab, const int s)
 {
   if(_headers[tab][s]) return _headers[tab][s];
@@ -286,6 +335,16 @@ static GtkWidget *_header(const int tab, const int s)
   gtk_widget_set_tooltip_text(mark, _("edited"));
   gtk_box_pack_start(GTK_BOX(box), arrow, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+  if(tab == 0)
+  {
+    // the panels show no module headers: their reset is here
+    GtkWidget *reset = dtgtk_button_new(dtgtk_cairo_paint_reset, 0, NULL);
+    gtk_widget_set_can_focus(reset, FALSE);
+    gtk_widget_set_tooltip_text(reset, _("reset this panel"));
+    g_signal_connect(reset, "button-release-event", G_CALLBACK(_reset_clicked),
+                     GINT_TO_POINTER(tab * 100 + s));
+    gtk_box_pack_end(GTK_BOX(box), reset, FALSE, FALSE, 0);
+  }
   gtk_box_pack_end(GTK_BOX(box), mark, FALSE, FALSE, 0);
   gtk_container_add(GTK_CONTAINER(evb), box);
   g_object_set_data(G_OBJECT(evb), "arrow", arrow);
@@ -356,9 +415,8 @@ static gint _flat_cmp(gconstpointer a, gconstpointer b)
   return ra < rb ? -1 : ra > rb;
 }
 
-static int _pin_top(GtkBox *panel)
+static int _pin_top(GtkBox *panel, int pos)
 {
-  int pos = 0;
   GList *children = gtk_container_get_children(GTK_CONTAINER(panel));
   for(const GList *c = children; c; c = g_list_next(c))
     if(g_object_get_data(G_OBJECT(c->data), "dt-pin-top"))
@@ -390,22 +448,172 @@ static gboolean _visible_in_tab(const int tab, dt_iop_module_t *module)
   return dt_lrp_in_tab(tab, module);
 }
 
+static const char *_caption(const char *op)
+{
+  for(int i = 0; i < G_N_ELEMENTS(_captions); i++)
+    if(!strcmp(_captions[i].op, op)) return _(_captions[i].caption);
+  return dt_iop_get_localized_name(op);
+}
+
+static void _keep_hidden(GtkWidget *w, gpointer data)
+{
+  if(g_object_get_data(G_OBJECT(w), "dt-lrp-hidden")) gtk_widget_hide(w);
+}
+
+// the rows of the module body besides its controls (masks, blending, guides):
+// hidden in the develop panels (all tools has them), shown again as they were
+static void _body_extras(dt_iop_module_t *module, GtkWidget *cap, const gboolean hide)
+{
+  GtkWidget *body = dtgtk_expander_get_body(DTGTK_EXPANDER(module->expander));
+  GList *children = gtk_container_get_children(GTK_CONTAINER(body));
+  for(const GList *c = children; c; c = g_list_next(c))
+  {
+    GtkWidget *w = c->data;
+    if(w == module->widget || w == cap) continue;
+    GObject *o = G_OBJECT(w);
+    if(hide)
+    {
+      if(g_object_get_data(o, "dt-lrp-hidden")) continue;
+      g_object_set_data(o, "dt-lrp-was-visible", GINT_TO_POINTER(gtk_widget_get_visible(w)));
+      g_object_set_data(o, "dt-lrp-hidden", GINT_TO_POINTER(TRUE));
+      if(!g_object_get_data(o, "dt-lrp-guard"))
+      {
+        // darktable shows the mask rows again when it updates them
+        g_signal_connect_after(w, "show", G_CALLBACK(_keep_hidden), NULL);
+        g_object_set_data(o, "dt-lrp-guard", GINT_TO_POINTER(TRUE));
+      }
+      gtk_widget_hide(w);
+    }
+    else if(g_object_get_data(o, "dt-lrp-hidden"))
+    {
+      g_object_set_data(o, "dt-lrp-hidden", NULL);
+      gtk_widget_set_visible(w, GPOINTER_TO_INT(g_object_get_data(o, "dt-lrp-was-visible")));
+    }
+  }
+  g_list_free(children);
+}
+
+// a module of a develop panel shows its controls without its header, open;
+// with a heading when the panel has several modules
+static void _flatten(dt_iop_module_t *module, const gboolean flat, const gboolean caption)
+{
+  GtkWidget *exp = module->expander;
+  GtkWidget *head = dtgtk_expander_get_header_event_box(DTGTK_EXPANDER(exp));
+  const gboolean was = g_object_get_data(G_OBJECT(exp), "dt-lrp-flat") != NULL;
+  GtkWidget *cap = g_object_get_data(G_OBJECT(exp), "dt-lrp-caption");
+
+  if(flat)
+  {
+    if(!cap)
+    {
+      cap = dt_ui_section_label_new(_caption(module->op));
+      gtk_widget_set_name(cap, "lrp-caption");
+      GtkWidget *body = dtgtk_expander_get_body(DTGTK_EXPANDER(exp));
+      gtk_box_pack_start(GTK_BOX(body), cap, FALSE, FALSE, 0);
+      gtk_box_reorder_child(GTK_BOX(body), cap, 0);
+      gtk_widget_set_no_show_all(cap, TRUE);
+      g_object_set_data(G_OBJECT(exp), "dt-lrp-caption", cap);
+    }
+    gtk_widget_set_visible(cap, caption);
+    _body_extras(module, cap, TRUE);
+    if(!was)
+    {
+      g_object_set_data(G_OBJECT(exp), "dt-lrp-flat", GINT_TO_POINTER(TRUE));
+      gtk_widget_set_no_show_all(head, TRUE);
+      gtk_widget_hide(head);
+      dt_gui_add_class(exp, "dt_lrp_flat");
+    }
+    // open, without taking the focus (a focused crop would start cropping)
+    if(!module->expanded || !dtgtk_expander_get_expanded(DTGTK_EXPANDER(exp)))
+    {
+      module->expanded = TRUE;
+      dtgtk_expander_set_expanded_no_scroll(DTGTK_EXPANDER(exp), TRUE);
+    }
+  }
+  else if(was)
+  {
+    g_object_set_data(G_OBJECT(exp), "dt-lrp-flat", NULL);
+    gtk_widget_set_no_show_all(head, FALSE);
+    gtk_widget_show(head);
+    if(cap) gtk_widget_hide(cap);
+    _body_extras(module, cap, FALSE);
+    dt_gui_remove_class(exp, "dt_lrp_flat");
+    if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+    module->expanded = FALSE;
+    dtgtk_expander_set_expanded_no_scroll(DTGTK_EXPANDER(exp), FALSE);
+  }
+}
+
+// the header and the modules of a menu (develop: a panel) from pos
+static int _section_update(GtkBox *panel, const int tab, const int s, int pos)
+{
+  GList *modules = _section_modules(tab, s);
+  int shown = 0;
+  gboolean edited = FALSE;
+  for(const GList *m = modules; m; m = g_list_next(m))
+  {
+    dt_iop_module_t *module = m->data;
+    if(_visible_in_tab(tab, module))
+    {
+      shown++;
+      if(module->enabled && _in_history(module)) edited = TRUE;
+    }
+  }
+
+  gboolean open = FALSE;
+  if(shown > 0)
+  {
+    GtkWidget *h = _header(tab, s);
+    gchar *key = _conf_key(tab, s);
+    open = dt_conf_get_bool(key);
+    g_free(key);
+    gtk_label_set_text(GTK_LABEL(g_object_get_data(G_OBJECT(h), "mark")), edited ? "●" : "");
+    gtk_box_reorder_child(panel, h, pos++);
+    gtk_widget_show(h);
+  }
+  else if(_headers[tab][s])
+    gtk_widget_hide(_headers[tab][s]);
+
+  // develop: the controls of the panel, all tools: the modules of the menu
+  const gboolean panels = tab == 0;
+  for(const GList *m = modules; m; m = g_list_next(m))
+  {
+    dt_iop_module_t *module = m->data;
+    gtk_box_reorder_child(panel, module->expander, pos++);
+    // the modules of a panel stay open when it closes, it only hides them
+    const gboolean in_tab = _visible_in_tab(tab, module);
+    const gboolean visible = open && in_tab;
+    _flatten(module, panels && in_tab, shown > 1);
+    if(visible)
+      gtk_widget_show(module->expander);
+    else
+      _hide_module(module);
+    if(panels) dt_gui_remove_class(module->expander, "dt_lrp_menu_item");
+    else dt_gui_add_class(module->expander, "dt_lrp_menu_item");
+  }
+  g_list_free(modules);
+  return pos;
+}
+
 void dt_lrp_update(const int tab)
 {
   if(!darktable.gui || !darktable.develop || !darktable.develop->gui_attached) return;
   _tab = tab;
   GtkBox *panel = dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
-  int pos = _pin_top(panel);
 
   if(tab < 0 || tab >= DT_LRP_TABS)
   {
-    // no menus: the modules in the order of the panels
+    // no menus: the modules with their headers, in the order of the panels
     _hide_headers(-1);
+    int pos = _pin_top(panel, 0);
     GList *modules = g_list_sort(g_list_reverse(g_list_copy(darktable.develop->iop)), _flat_cmp);
     for(const GList *m = modules; m; m = g_list_next(m))
     {
       dt_iop_module_t *module = m->data;
-      if(module->expander) gtk_box_reorder_child(panel, module->expander, pos++);
+      if(!module->expander) continue;
+      _flatten(module, FALSE, FALSE);
+      dt_gui_remove_class(module->expander, "dt_lrp_menu_item");
+      gtk_box_reorder_child(panel, module->expander, pos++);
     }
     g_list_free(modules);
     return;
@@ -413,50 +621,13 @@ void dt_lrp_update(const int tab)
 
   _hide_headers(tab);
   const _tab_t *t = &_tabs[tab];
+  int pos = 0;
+  // develop: the tools of Lightroom's tool strip above the basic panel
   for(int s = 0; s < t->n; s++)
-  {
-    GList *modules = _section_modules(tab, s);
-    int shown = 0;
-    gboolean edited = FALSE;
-    for(const GList *m = modules; m; m = g_list_next(m))
-    {
-      dt_iop_module_t *module = m->data;
-      if(_visible_in_tab(tab, module))
-      {
-        shown++;
-        if(module->enabled && _in_history(module)) edited = TRUE;
-      }
-    }
-    // a menu header when the menu has several modules (develop: a panel with one
-    // module shows it under the panel name)
-    const gboolean menu = shown > (tab == 0 ? 1 : 0);
-    gboolean open = TRUE;
-    if(menu)
-    {
-      GtkWidget *h = _header(tab, s);
-      gchar *key = _conf_key(tab, s);
-      open = dt_conf_get_bool(key);
-      g_free(key);
-      gtk_label_set_text(GTK_LABEL(g_object_get_data(G_OBJECT(h), "mark")), edited ? "●" : "");
-      gtk_box_reorder_child(panel, h, pos++);
-      gtk_widget_show(h);
-    }
-    else if(_headers[tab][s])
-      gtk_widget_hide(_headers[tab][s]);
-
-    for(const GList *m = modules; m; m = g_list_next(m))
-    {
-      dt_iop_module_t *module = m->data;
-      gtk_box_reorder_child(panel, module->expander, pos++);
-      if(open && _visible_in_tab(tab, module))
-        gtk_widget_show(module->expander);
-      else
-        _hide_module(module);
-      if(menu) dt_gui_add_class(module->expander, "dt_lrp_menu_item");
-      else dt_gui_remove_class(module->expander, "dt_lrp_menu_item");
-    }
-    g_list_free(modules);
-  }
+    if(t->sections[s].top) pos = _section_update(panel, tab, s, pos);
+  pos = _pin_top(panel, pos);
+  for(int s = 0; s < t->n; s++)
+    if(!t->sections[s].top) pos = _section_update(panel, tab, s, pos);
 
   // the other modules are not in this tab
   for(const GList *m = g_list_last(darktable.develop->iop); m; m = g_list_previous(m))
@@ -465,8 +636,19 @@ void dt_lrp_update(const int tab)
     if(module->expander && _section(tab, module) < 0)
     {
       gtk_box_reorder_child(panel, module->expander, pos++);
+      _flatten(module, FALSE, FALSE);
       _hide_module(module);
     }
+  }
+
+  // the darkroom and another tab start at the top of the panel (darktable
+  // would scroll to the module that was open last)
+  if(tab != _shown_tab)
+  {
+    _shown_tab = tab;
+    dtgtk_expander_cancel_scroll();
+    GtkWidget *sw = gtk_widget_get_ancestor(GTK_WIDGET(panel), GTK_TYPE_SCROLLED_WINDOW);
+    if(sw) gtk_adjustment_set_value(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(sw)), 0);
   }
 }
 
@@ -491,6 +673,7 @@ void dt_lrp_reveal(const int tab, dt_iop_module_t *module)
 
 void dt_lrp_cleanup(void)
 {
+  _shown_tab = -1;
   for(int tab = 0; tab < DT_LRP_TABS; tab++)
     for(int s = 0; s < G_N_ELEMENTS(_tools); s++)
       if(_headers[tab][s])

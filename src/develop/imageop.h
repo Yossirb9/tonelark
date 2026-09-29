@@ -361,6 +361,8 @@ void dt_iop_gui_set_enable_button(dt_iop_module_t *module);
 void dt_iop_gui_update(dt_iop_module_t *module);
 /** reset the ui to its defaults */
 void dt_iop_gui_reset(dt_iop_module_t *module);
+/** reset the parameters like the reset button of the header, and switch the module off */
+void dt_iop_gui_reset_module(dt_iop_module_t *module);
 /** set expanded state of iop */
 void dt_iop_gui_set_expanded(dt_iop_module_t *module,
                              const gboolean expanded,

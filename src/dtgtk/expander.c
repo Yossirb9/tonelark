@@ -85,6 +85,14 @@ void dtgtk_expander_set_expanded(GtkDarktableExpander *expander, gboolean expand
 {
   g_return_if_fail(DTGTK_IS_EXPANDER(expander));
 
+  // Tonelark: the modules of the Lightroom develop panels are always open
+  // and never scroll the panel to themselves (see gui/lrpanels.c)
+  if(g_object_get_data(G_OBJECT(expander), "dt-lrp-flat"))
+  {
+    dtgtk_expander_set_expanded_no_scroll(expander, expanded);
+    return;
+  }
+
   expanded = expanded != FALSE;
 
   if(expander->expanded != expanded)
@@ -132,6 +140,31 @@ void dtgtk_expander_set_expanded(GtkDarktableExpander *expander, gboolean expand
     // widget layout has not changed (e.g. module already visible and
     // expanded on the current tab).
     gtk_widget_queue_resize(GTK_WIDGET(expander));
+  }
+}
+
+void dtgtk_expander_cancel_scroll(void)
+{
+  _set_last_expanded(NULL);
+  _scroll_widget = NULL;
+}
+
+void dtgtk_expander_set_expanded_no_scroll(GtkDarktableExpander *expander, gboolean expanded)
+{
+  g_return_if_fail(DTGTK_IS_EXPANDER(expander));
+
+  expanded = expanded != FALSE;
+  if(expander->expanded == expanded) return;
+  expander->expanded = expanded;
+  if(expanded)
+    dt_gui_add_class(GTK_WIDGET(expander), "dt_module_expanded");
+  else
+    dt_gui_remove_class(GTK_WIDGET(expander), "dt_module_expanded");
+  if(expander->body)
+  {
+    gtk_widget_set_visible(expander->body, TRUE);
+    gtk_revealer_set_transition_duration(GTK_REVEALER(expander->frame), 0);
+    gtk_revealer_set_reveal_child(GTK_REVEALER(expander->frame), expanded);
   }
 }
 

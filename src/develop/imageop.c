@@ -2347,6 +2347,14 @@ static gboolean _gui_reset_callback(GtkButton *button,
   return TRUE;
 }
 
+void dt_iop_gui_reset_module(dt_iop_module_t *module)
+{
+  // as the reset button of the module header, then off as a new module
+  _gui_reset_callback(NULL, NULL, module);
+  if(module->off && module->enabled && !module->default_enabled && !module->hide_enable_button)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), FALSE);
+}
+
 static gboolean _presets_popup_callback(GtkButton *button,
                                         GdkEventButton *event,
                                         dt_iop_module_t *module)
@@ -2503,6 +2511,9 @@ void dt_iop_request_focus(dt_iop_module_t *module)
 static void _gui_set_single_expanded(dt_iop_module_t *module, gboolean expanded)
 {
   if(!module->expander) return;
+
+  // Tonelark: the modules of the Lightroom panels have no header and stay open
+  if(!expanded && g_object_get_data(G_OBJECT(module->expander), "dt-lrp-flat")) return;
 
   /* update expander arrow state */
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->expander), expanded);

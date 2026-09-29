@@ -44,6 +44,10 @@ GtkWidget *dtgtk_expander_get_body(GtkDarktableExpander *expander);
 GtkWidget *dtgtk_expander_get_body_event_box(GtkDarktableExpander *expander);
 
 void dtgtk_expander_set_expanded(GtkDarktableExpander *expander, gboolean expanded);
+// open or close at once, without scrolling the panel to the expander
+void dtgtk_expander_set_expanded_no_scroll(GtkDarktableExpander *expander, gboolean expanded);
+// forget the expander the panel should scroll to
+void dtgtk_expander_cancel_scroll(void);
 gboolean dtgtk_expander_get_expanded(GtkDarktableExpander *expander);
 void dtgtk_expander_set_drag_hover(GtkDarktableExpander *expander, gboolean allow, gboolean below, guint time);
 

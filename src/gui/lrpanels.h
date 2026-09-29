@@ -7,11 +7,12 @@
     (at your option) any later version.
 */
 
-// The processing modules of the darkroom shown like the Lightroom develop
-// panels: a "develop" tab with the Lightroom panels (tone curve, HSL / color,
-// color grading, detail, lens corrections, transform, effects, calibration,
-// healing) under the Lightroom names, and an "all tools" tab with every
-// module in collapsible menus by task.
+// The processing modules of the darkroom shown like the Lightroom Classic
+// develop panel: a "develop" tab with its tools (crop, remove) above the basic
+// panel and its panels (tone curve, HSL / color, color grading, detail, lens
+// corrections, transform, effects, calibration) below, each showing the
+// controls of its modules at once, and an "all tools" tab with every module
+// in collapsible menus by task.
 
 #pragma once
 
