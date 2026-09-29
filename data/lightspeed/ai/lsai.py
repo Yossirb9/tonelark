@@ -559,9 +559,10 @@ Most of them are raw files as the camera took them, before any editing: rate wha
 The scores: 9-10 outstanding, 7-8 good, 5-6 usable with clear flaws, 3-4 weak, 1-2 unusable (out of focus, eyes closed).
 Compare the photos with each other and use the whole scale: do not give most photos about the same score, the best photos get clearly higher scores than the others.
 {bursts}"keep" is true only for the photos worth keeping and editing{keep_for}.
+"delete" is true for a candidate for deletion: a photo that no edit can save (out of focus, motion blur, eyes closed, an accidental shot, the subject cut off) or a near duplicate clearly worse than another photo of the same moment. It is about the photo alone, never about the request: a good photo that does not answer the request is not deleted.
 "reason" explains the score in {language}, in one or two short sentences (at most 30 words): what is good, what lowered the score{reason_for}, and what to fix in the edit if anything. The user reads it next to that photo alone: write about that photo, without mentioning the other photos or their numbers.
 Answer with JSON only, no other text:
-{{"photos":[{{"n":1,"score":7.5,"keep":true,{match}"reason":"..."}}]}}"""
+{{"photos":[{{"n":1,"score":7.5,"keep":true,"delete":false,{match}"reason":"..."}}]}}"""
 
 RATE_TASK = ("Act as a professional photo editor culling the shoot. Rate every photo from 1 to 10 for its "
              "potential: the subject in focus, no motion blur, open eyes and a good expression, the moment, "
@@ -609,6 +610,7 @@ def cmd_rate(req):
             if 1 <= n <= len(chunk):
                 out.append(dict(id=chunk[n - 1]['id'], score=max(1.0, min(10.0, float(r.get('score', 0)))),
                                 keep=bool(r.get('keep', False)), match=r.get('match'),
+                                delete=bool(r.get('delete', False)),
                                 reason=' '.join(str(r.get('reason', '')).split())[:300]))
         return out
 
