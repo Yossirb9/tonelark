@@ -145,7 +145,10 @@ static const struct { const char *op, *title; } _titles[] =
 };
 
 // the menu headers of the right panel, [tab][section]
-static GtkWidget *_headers[DT_LRP_TABS][G_N_ELEMENTS(_tools)];
+// (the most sections of a tab, checked below)
+#define MAX_SECTIONS 16
+G_STATIC_ASSERT(G_N_ELEMENTS(_develop) <= MAX_SECTIONS && G_N_ELEMENTS(_tools) <= MAX_SECTIONS);
+static GtkWidget *_headers[DT_LRP_TABS][MAX_SECTIONS];
 static int _tab = -1;
 static int _shown_tab = -1;     // the tab laid out since entering the darkroom
 
@@ -156,8 +159,11 @@ gboolean dt_lrp_names(void)
 
 gboolean dt_lrp_enabled(void)
 {
-  return dt_lrp_names()
-    && dt_conf_is_equal("plugins/darkroom/modulegroups_preset", _("Tonelark"));
+  if(!dt_lrp_names()) return FALSE;
+  // no layout chosen (or an old one's name left empty): the module groups
+  // fall back to the Tonelark layout
+  const char *preset = dt_conf_get_string_const("plugins/darkroom/modulegroups_preset");
+  return !preset || !*preset || !strcmp(preset, _("Tonelark"));
 }
 
 const char *dt_lrp_module_title(const char *op)
@@ -429,7 +435,7 @@ static void _hide_headers(const int except_tab)
 {
   for(int tab = 0; tab < DT_LRP_TABS; tab++)
     if(tab != except_tab)
-      for(int s = 0; s < G_N_ELEMENTS(_tools); s++)
+      for(int s = 0; s < MAX_SECTIONS; s++)
         if(_headers[tab][s]) gtk_widget_hide(_headers[tab][s]);
 }
 
@@ -675,7 +681,7 @@ void dt_lrp_cleanup(void)
 {
   _shown_tab = -1;
   for(int tab = 0; tab < DT_LRP_TABS; tab++)
-    for(int s = 0; s < G_N_ELEMENTS(_tools); s++)
+    for(int s = 0; s < MAX_SECTIONS; s++)
       if(_headers[tab][s])
       {
         gtk_widget_destroy(_headers[tab][s]);
