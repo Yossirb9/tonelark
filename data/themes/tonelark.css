@@ -553,3 +553,17 @@ tooltip label,
   font-size: 0.9em;
   padding: 0.2em 0;
 }
+
+/* the import dialog: the grid of the thumbnails, the photos to import checked */
+iconview#import-grid
+{
+  background-color: @ls_grid;
+  color: @ls_text;
+}
+
+iconview#import-grid:selected
+{
+  background-color: #5d6b80;
+  color: #ffffff;
+  border-radius: 3px;
+}

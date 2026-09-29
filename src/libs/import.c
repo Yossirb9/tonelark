@@ -65,6 +65,8 @@ static uint32_t _do_select_new(dt_lib_module_t* self);
 static void _update_places_list(dt_lib_module_t* self);
 static gboolean _update_files_list(dt_lib_module_t* self);
 static void _update_folders_list(dt_lib_module_t* self);
+static void _grid_thumbs(dt_lib_module_t *self);
+static gboolean _grid_sync_idle(gpointer data);
 static void _update_images_number(dt_lib_module_t* self,
                                   const guint nb_sel);
 static void _lib_import_select_folder(GtkWidget *widget,
@@ -83,6 +85,7 @@ typedef enum dt_import_cols_t
   DT_IMPORT_UI_DATETIME,        // displayed datetime
   DT_IMPORT_UI_EXISTS,          // whether the image is already imported
   DT_IMPORT_DATETIME,           // file datetime
+  DT_IMPORT_GRID_THUMB,         // thumbnail of the grid (Tonelark)
   DT_IMPORT_NUM_COLS
 } dt_import_cols_t;
 
@@ -159,6 +162,11 @@ typedef struct dt_lib_import_t
     dt_gui_collapsible_section_t cs;
     guint fn_line;
     GtkWidget *info;
+    // the grid of the thumbnails (Tonelark): the same list and selection
+    GtkWidget *grid, *grid_w, *grid_toggle;
+    guint grid_event, grid_sync;
+    gboolean syncing;
+    int anchor;                 // the last photo clicked, for shift+click
   } from;
   GtkListStore *placesModel;
   GtkWidget *placesView;
@@ -420,7 +428,7 @@ static void detach_lua_widgets(GtkWidget *extra_lua_widgets)
 #endif
 
 // maybe this should be (partly) in imageio/imageio.[c|h]?
-static GdkPixbuf *_import_get_thumbnail(const gchar *filename)
+static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int side)
 {
   GdkPixbuf *pixbuf = NULL;
   gboolean have_preview = FALSE, no_preview_fallback = FALSE;
@@ -448,8 +456,8 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename)
       if(!gdk_pixbuf_loader_close(loader, NULL)) goto cleanup;
       if(!(tmp = gdk_pixbuf_loader_get_pixbuf(loader))) goto cleanup;
       const float ratio = 1.0 * gdk_pixbuf_get_height(tmp) / gdk_pixbuf_get_width(tmp);
-      const int width = 128;
-      const int height = 128 * ratio;
+      const int width = side;
+      const int height = side * ratio;
       pixbuf = gdk_pixbuf_scale_simple(tmp, width, height, GDK_INTERP_BILINEAR);
 
       have_preview = TRUE;
@@ -466,7 +474,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename)
   // read the whole file to get a small size thumbnail
   if(!have_preview && !no_preview_fallback)
   {
-    pixbuf = gdk_pixbuf_new_from_file_at_size(filename, 128, 128, NULL);
+    pixbuf = gdk_pixbuf_new_from_file_at_size(filename, side, side, NULL);
     if(pixbuf != NULL) have_preview = TRUE;
   }
 
@@ -506,7 +514,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename)
   if(!have_preview || no_preview_fallback)
   {
     /* load the dt logo as a background */
-    cairo_surface_t *surface = dt_util_get_logo(128.0);
+    cairo_surface_t *surface = dt_util_get_logo(side);
     if(surface)
     {
       guint8 *image_buffer = cairo_image_surface_get_data(surface);
@@ -546,7 +554,7 @@ static void _thumb_set_in_listview(GtkTreeModel *model,
   else
 #endif
   {
-    pixbuf = thumb_sel ? _import_get_thumbnail(fullname) : d->from.eye;
+    pixbuf = thumb_sel ? _import_get_thumbnail(fullname, 128) : d->from.eye;
   }
   gtk_list_store_set(d->from.store, iter, DT_IMPORT_SEL_THUMB, thumb_sel,
                                           DT_IMPORT_THUMB, pixbuf, -1);
@@ -731,6 +739,7 @@ static void _import_add_file_callback(GObject *direnum,
     g_object_unref(direnum);
 
     _update_images_number(self, 0);
+    _grid_thumbs(self);
 
     // Do we have more to parse
 
@@ -759,6 +768,7 @@ static void _import_add_file_callback(GObject *direnum,
       }
       d->is_importing = FALSE;
       _import_active(self, TRUE, count_sel);
+      _grid_thumbs(self);
       _update_images_number(self, count_sel);
 
       gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(d->from.store),
@@ -979,6 +989,8 @@ static void _import_from_selection_changed(GtkTreeSelection *selection,
   dt_lib_import_t *d = self->data;
   const guint nb_sel = gtk_tree_selection_count_selected_rows(selection);
   _update_images_number(self, nb_sel);
+  if(!d->from.syncing && d->from.grid && !d->from.grid_sync)
+    d->from.grid_sync = g_idle_add(_grid_sync_idle, self);
   if(!d->is_importing)
     gtk_dialog_set_response_sensitive(GTK_DIALOG(d->from.dialog),
                                       GTK_RESPONSE_ACCEPT, nb_sel ? TRUE : FALSE);
@@ -1834,13 +1846,230 @@ static void _lib_import_select_folder(GtkWidget *widget,
   _update_files_list(self);
 }
 
+// ---------------------------------------------------------------------------
+// the grid of the thumbnails (Tonelark): the photos to choose at a glance. It
+// shows the list of the files: a click checks or unchecks a photo (the
+// selection of the list, what is imported), shift+click a range from the
+// last one clicked.
+
+#define GRID_THUMB 160
+
+static gboolean _grid_shown(dt_lib_import_t *d)
+{
+  return d->from.grid_w && gtk_widget_get_visible(d->from.grid_w);
+}
+
+// the thumbnails, a little at a time
+static gboolean _grid_thumbs_step(gpointer data)
+{
+  dt_lib_module_t *self = data;
+  dt_lib_import_t *d = self->data;
+  if(!_grid_shown(d))
+  {
+    d->from.grid_event = 0;
+    return G_SOURCE_REMOVE;
+  }
+  GtkTreeModel *model = GTK_TREE_MODEL(d->from.store);
+  GtkTreeIter iter;
+  const gint64 t0 = g_get_monotonic_time();
+  gboolean left = FALSE;
+  for(gboolean valid = gtk_tree_model_get_iter_first(model, &iter); valid;
+      valid = gtk_tree_model_iter_next(model, &iter))
+  {
+    GdkPixbuf *pix = NULL;
+    gtk_tree_model_get(model, &iter, DT_IMPORT_GRID_THUMB, &pix, -1);
+    if(pix)
+    {
+      g_object_unref(pix);
+      continue;
+    }
+    if(g_get_monotonic_time() - t0 > 40000)
+    {
+      left = TRUE;
+      break;
+    }
+    gchar *fullname = NULL, *filename = NULL;
+    gtk_tree_model_get(model, &iter, DT_IMPORT_FILENAME, &fullname, DT_IMPORT_UI_FILENAME, &filename, -1);
+#ifdef HAVE_GPHOTO2
+    if(d->import_case == DT_IMPORT_CAMERA)
+    {
+      pix = dt_camctl_get_thumbnail(darktable.camctl, d->camera, filename);
+      if(pix) g_object_ref(pix);
+    }
+    else
+#endif
+      pix = _import_get_thumbnail(fullname, DT_PIXEL_APPLY_DPI(GRID_THUMB));
+    if(!pix) pix = g_object_ref(d->from.eye);
+    gtk_list_store_set(d->from.store, &iter, DT_IMPORT_GRID_THUMB, pix, -1);
+    g_object_unref(pix);
+    g_free(fullname);
+    g_free(filename);
+  }
+  if(!left) d->from.grid_event = 0;
+  return left;
+}
+
+static void _grid_thumbs(dt_lib_module_t *self)
+{
+  dt_lib_import_t *d = self->data;
+  if(!d->from.grid_event && _grid_shown(d))
+    d->from.grid_event = g_timeout_add_full(G_PRIORITY_LOW, 20, _grid_thumbs_step, self, NULL);
+}
+
+// the selection of the list on the grid, once the list changed it
+static gboolean _grid_sync_idle(gpointer data)
+{
+  dt_lib_module_t *self = data;
+  dt_lib_import_t *d = self->data;
+  d->from.grid_sync = 0;
+  if(!d->from.grid) return G_SOURCE_REMOVE;
+  d->from.syncing = TRUE;
+  GtkIconView *iv = GTK_ICON_VIEW(d->from.grid);
+  gtk_icon_view_unselect_all(iv);
+  GtkTreeModel *model = GTK_TREE_MODEL(d->from.store);
+  GList *paths = gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(d->from.treeview), &model);
+  for(GList *l = paths; l; l = g_list_next(l)) gtk_icon_view_select_path(iv, l->data);
+  g_list_free_full(paths, (GDestroyNotify)gtk_tree_path_free);
+  d->from.syncing = FALSE;
+  return G_SOURCE_REMOVE;
+}
+
+// the selection of the grid in the list, the one imported
+static void _grid_selection_changed(GtkIconView *iv, dt_lib_module_t *self)
+{
+  dt_lib_import_t *d = self->data;
+  if(d->from.syncing) return;
+  d->from.syncing = TRUE;
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(d->from.treeview);
+  gtk_tree_selection_unselect_all(selection);
+  GList *paths = gtk_icon_view_get_selected_items(iv);
+  for(GList *l = paths; l; l = g_list_next(l)) gtk_tree_selection_select_path(selection, l->data);
+  g_list_free_full(paths, (GDestroyNotify)gtk_tree_path_free);
+  d->from.syncing = FALSE;
+}
+
+// a click checks or unchecks, shift+click the range from the last one clicked
+static gboolean _grid_button_press(GtkWidget *w, GdkEventButton *e, dt_lib_module_t *self)
+{
+  dt_lib_import_t *d = self->data;
+  if(e->button != GDK_BUTTON_PRIMARY) return FALSE;
+  GtkIconView *iv = GTK_ICON_VIEW(w);
+  GtkTreePath *path = gtk_icon_view_get_path_at_pos(iv, (gint)e->x, (gint)e->y);
+  // on the empty space: nothing (a click there would uncheck all the photos)
+  if(!path) return TRUE;
+  if(e->type == GDK_BUTTON_PRESS)
+  {
+    const int k = gtk_tree_path_get_indices(path)[0];
+    const gboolean on = !gtk_icon_view_path_is_selected(iv, path);
+    if((e->state & GDK_SHIFT_MASK) && d->from.anchor >= 0)
+    {
+      for(int i = MIN(k, d->from.anchor); i <= MAX(k, d->from.anchor); i++)
+      {
+        GtkTreePath *p = gtk_tree_path_new_from_indices(i, -1);
+        if(on)
+          gtk_icon_view_select_path(iv, p);
+        else
+          gtk_icon_view_unselect_path(iv, p);
+        gtk_tree_path_free(p);
+      }
+    }
+    else if(on)
+      gtk_icon_view_select_path(iv, path);
+    else
+      gtk_icon_view_unselect_path(iv, path);
+    d->from.anchor = k;
+    gtk_widget_queue_draw(w);
+  }
+  gtk_tree_path_free(path);
+  return TRUE;                 // a double click: two clicks, nothing more
+}
+
+// the name under the thumbnail, checked or not, and already in the library
+static void _grid_text(GtkCellLayout *layout, GtkCellRenderer *cell, GtkTreeModel *model, GtkTreeIter *iter,
+                       gpointer data)
+{
+  dt_lib_module_t *self = data;
+  dt_lib_import_t *d = self->data;
+  gchar *name = NULL, *exists = NULL;
+  gtk_tree_model_get(model, iter, DT_IMPORT_UI_FILENAME, &name, DT_IMPORT_UI_EXISTS, &exists, -1);
+  GtkTreePath *path = gtk_tree_model_get_path(model, iter);
+  const gboolean on = d->from.grid && gtk_icon_view_path_is_selected(GTK_ICON_VIEW(d->from.grid), path);
+  gtk_tree_path_free(path);
+  gchar *base = name ? g_path_get_basename(name) : g_strdup("");
+  const gboolean in_library = exists && !strcmp(exists, "✔");
+  gchar *markup = in_library
+    ? g_markup_printf_escaped("%s %s\n<span alpha=\"55%%\">%s</span>", on ? "☑" : "☐", base,
+                              _("in the library"))
+    : g_markup_printf_escaped("%s %s", on ? "☑" : "☐", base);
+  g_object_set(cell, "markup", markup, NULL);
+  g_free(markup);
+  g_free(base);
+  g_free(name);
+  g_free(exists);
+}
+
+static void _grid_toggled(GtkToggleButton *b, dt_lib_module_t *self)
+{
+  dt_lib_import_t *d = self->data;
+  const gboolean grid = gtk_toggle_button_get_active(b);
+  dt_conf_set_bool("ui_last/import_grid", grid);
+  gtk_widget_set_visible(d->from.grid_w, grid);
+  gtk_widget_set_visible(d->from.w, !grid);
+  if(grid)
+  {
+    if(!d->from.grid_sync) d->from.grid_sync = g_idle_add(_grid_sync_idle, self);
+    _grid_thumbs(self);
+  }
+}
+
+static void _set_files_grid(GtkWidget *rbox, dt_lib_module_t *self)
+{
+  dt_lib_import_t *d = self->data;
+  d->from.anchor = -1;
+  d->from.grid = gtk_icon_view_new_with_model(GTK_TREE_MODEL(d->from.store));
+  GtkIconView *iv = GTK_ICON_VIEW(d->from.grid);
+  gtk_widget_set_name(d->from.grid, "import-grid");
+  gtk_icon_view_set_selection_mode(iv, GTK_SELECTION_MULTIPLE);
+  gtk_icon_view_set_item_width(iv, DT_PIXEL_APPLY_DPI(GRID_THUMB));
+  gtk_icon_view_set_item_padding(iv, DT_PIXEL_APPLY_DPI(3));
+  gtk_icon_view_set_spacing(iv, DT_PIXEL_APPLY_DPI(1));
+  gtk_icon_view_set_row_spacing(iv, DT_PIXEL_APPLY_DPI(4));
+  gtk_icon_view_set_column_spacing(iv, DT_PIXEL_APPLY_DPI(6));
+  gtk_icon_view_set_margin(iv, DT_PIXEL_APPLY_DPI(6));
+  GtkCellRenderer *pix = gtk_cell_renderer_pixbuf_new();
+  gtk_cell_renderer_set_fixed_size(pix, DT_PIXEL_APPLY_DPI(GRID_THUMB), DT_PIXEL_APPLY_DPI(GRID_THUMB));
+  // the photo on its name, the room of a landscape photo over it
+  gtk_cell_renderer_set_alignment(pix, 0.5, 1.0);
+  gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(iv), pix, FALSE);
+  gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(iv), pix, "pixbuf", DT_IMPORT_GRID_THUMB);
+  GtkCellRenderer *text = gtk_cell_renderer_text_new();
+  g_object_set(text, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, "xalign", 0.5, "alignment", PANGO_ALIGN_CENTER,
+               "width", DT_PIXEL_APPLY_DPI(GRID_THUMB), NULL);
+  gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(iv), text, FALSE);
+  gtk_cell_layout_set_cell_data_func(GTK_CELL_LAYOUT(iv), text, _grid_text, self, NULL);
+  gtk_widget_set_tooltip_text(d->from.grid, _("click: import this photo or not\n"
+                                              "shift+click: the photos from the last one clicked"));
+  g_signal_connect(d->from.grid, "selection-changed", G_CALLBACK(_grid_selection_changed), self);
+  g_signal_connect(d->from.grid, "button-press-event", G_CALLBACK(_grid_button_press), self);
+  d->from.grid_w = dt_gui_scroll_wrap(d->from.grid);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(d->from.grid_w), GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
+  gtk_box_pack_start(GTK_BOX(rbox), d->from.grid_w, TRUE, TRUE, 0);
+  gtk_widget_set_no_show_all(d->from.grid_w, TRUE);
+  gtk_widget_set_no_show_all(d->from.w, TRUE);
+  gtk_widget_show_all(d->from.grid);
+  gtk_widget_show_all(GTK_WIDGET(d->from.treeview));
+  const gboolean grid = !dt_conf_key_exists("ui_last/import_grid") || dt_conf_get_bool("ui_last/import_grid");
+  gtk_widget_set_visible(d->from.grid_w, grid);
+  gtk_widget_set_visible(d->from.w, !grid);
+}
+
 static void _set_files_list(GtkWidget *rbox, dt_lib_module_t* self)
 {
   dt_lib_import_t *d = self->data;
   d->from.store = gtk_list_store_new(DT_IMPORT_NUM_COLS, G_TYPE_BOOLEAN, GDK_TYPE_PIXBUF,
                                      G_TYPE_STRING, G_TYPE_STRING,
                                      G_TYPE_STRING, G_TYPE_STRING,
-                                     G_TYPE_UINT64);
+                                     G_TYPE_UINT64, GDK_TYPE_PIXBUF);
   d->from.eye = dt_draw_paint_to_pixbuf(GTK_WIDGET(d->from.dialog), 13, 0,
                                         dtgtk_cairo_paint_eye);
 
@@ -2082,13 +2311,17 @@ static void _import_from_dialog_new(dt_lib_module_t* self)
   }
   GtkWidget *ignore_nonraws =
     dt_gui_preferences_bool(grid, "ui_last/import_ignore_nonraws", col++, line, TRUE);
-  gtk_widget_set_hexpand(gtk_grid_get_child_at(grid, col++, line++), TRUE);
+  gtk_widget_set_hexpand(gtk_grid_get_child_at(grid, col++, line), TRUE);
   g_signal_connect(G_OBJECT(ignore_nonraws), "toggled",
                    G_CALLBACK(_ignore_nonraws_toggled), self);
+  d->from.grid_toggle = gtk_check_button_new_with_label(_("thumbnails"));
+  gtk_widget_set_tooltip_text(d->from.grid_toggle, _("the photos as a grid of thumbnails, or as a list"));
+  gtk_grid_attach(grid, d->from.grid_toggle, col++, line++, 1, 1);
   gtk_box_pack_start(GTK_BOX(rbox), GTK_WIDGET(grid), FALSE, FALSE, 8);
 
-  // files list
+  // files list, and the grid of the thumbnails (Tonelark)
   _set_files_list(rbox, self);
+  _set_files_grid(rbox, self);
   g_timeout_add_full(G_PRIORITY_LOW, 100, (GSourceFunc)_update_files_list, self, NULL);
 
 #ifdef HAVE_GPHOTO2
@@ -2133,6 +2366,13 @@ static void _import_from_dialog_new(dt_lib_module_t* self)
   {
     gtk_widget_show_all(d->from.dialog);
   }
+
+  // the grid or the list, as chosen last
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->from.grid_toggle),
+                               !dt_conf_key_exists("ui_last/import_grid")
+                               || dt_conf_get_bool("ui_last/import_grid"));
+  g_signal_connect(d->from.grid_toggle, "toggled", G_CALLBACK(_grid_toggled), self);
+  _grid_toggled(GTK_TOGGLE_BUTTON(d->from.grid_toggle), self);
 
   // make sure no buttons focused, so default button is marked
   gtk_window_set_focus(GTK_WINDOW(d->from.dialog), NULL);
@@ -2290,6 +2530,10 @@ static void _import_from_dialog_free(dt_lib_module_t* self)
 {
   dt_lib_import_t *d = self->data;
   d->from.event = 0;
+  if(d->from.grid_event) g_source_remove(d->from.grid_event);
+  if(d->from.grid_sync) g_source_remove(d->from.grid_sync);
+  d->from.grid_event = d->from.grid_sync = 0;
+  d->from.grid = d->from.grid_w = NULL;
   g_object_unref(d->from.eye);
   g_object_unref(d->from.store);
   if(d->import_case != DT_IMPORT_CAMERA)
