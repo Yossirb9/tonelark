@@ -169,6 +169,8 @@ typedef struct dt_iop_retouch_gui_data_t
   GtkWidget *sl_fill_brightness;
 
   GtkWidget *sl_mask_opacity; // draw mask opacity
+
+  dt_gui_collapsible_section_t cs_wavelets; // Tonelark: the wavelets, advanced
 } dt_iop_retouch_gui_data_t;
 
 typedef struct dt_iop_retouch_params_t dt_iop_retouch_data_t;
@@ -1902,7 +1904,9 @@ static gboolean rt_add_shape_callback(GtkWidget *widget,
 
   dt_iop_color_picker_reset(self, TRUE);
 
-  const gboolean creation_continuous = dt_modifier_is(e->state, GDK_CONTROL_MASK);
+  // Tonelark: a click adds spots until the shape is clicked again or the
+  // photo right-clicked, like the remove tool of Lightroom; ctrl+click one
+  const gboolean creation_continuous = !dt_modifier_is(e->state, GDK_CONTROL_MASK);
 
   rt_add_shape(widget, creation_continuous, self);
 
@@ -2300,6 +2304,8 @@ void gui_update(dt_iop_module_t *self)
     darktable.develop->form_gui->creation_continuous_module = NULL;
   }
 
+  dt_gui_update_collapsible_section(&g->cs_wavelets);
+
   // update clones count
   const dt_masks_form_t *grp =
     dt_masks_get_from_id(self->dev, self->blend_params->mask_id);
@@ -2414,6 +2420,43 @@ void change_image(dt_iop_module_t *self)
   }
 }
 
+// Tonelark: a click on the name under an icon is a click on the icon
+static gboolean rt_name_pressed(GtkWidget *widget,
+                                GdkEventButton *e,
+                                GtkWidget *button)
+{
+  gboolean handled = FALSE;
+  g_signal_emit_by_name(button, "button-press-event", e, &handled);
+  return TRUE;
+}
+
+// Tonelark: a row of icons of the grid with its name, and their names under them
+static void rt_named_row(GtkWidget *grid,
+                         const int row,
+                         const char *name,
+                         GtkWidget **buttons,
+                         const char **names,
+                         const int n)
+{
+  GtkWidget *label = dt_ui_label_new(name);
+  gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
+  gtk_grid_attach(GTK_GRID(grid), label, 0, row, 1, 2);
+  for(int k = 0; k < n; k++)
+  {
+    gtk_widget_set_halign(buttons[k], GTK_ALIGN_CENTER);
+    gtk_grid_attach(GTK_GRID(grid), buttons[k], k + 1, row, 1, 1);
+    GtkWidget *under = gtk_label_new(_(names[k]));
+    gtk_widget_set_name(under, "retouch-name");
+    GtkWidget *ev = gtk_event_box_new();
+    gtk_container_add(GTK_CONTAINER(ev), under);
+    gchar *tip = gtk_widget_get_tooltip_text(buttons[k]);
+    gtk_widget_set_tooltip_text(ev, tip);
+    g_free(tip);
+    g_signal_connect(G_OBJECT(ev), "button-press-event", G_CALLBACK(rt_name_pressed), buttons[k]);
+    gtk_grid_attach(GTK_GRID(grid), ev, k + 1, row + 1, 1, 1);
+  }
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_retouch_gui_data_t *g = IOP_GUI_ALLOC(retouch);
@@ -2421,87 +2464,124 @@ void gui_init(dt_iop_module_t *self)
 
   change_image(self);
 
-  // shapes toolbar
-  g->label_form = GTK_LABEL(gtk_label_new("-1"));
-  GtkWidget *hbox_shapes = dt_gui_hbox(dt_ui_label_new(_("shapes:")), g->label_form);
-  gtk_widget_set_tooltip_text
-    (hbox_shapes,
-     _("to add a shape select an algorithm and a shape type and click on the image.\n"
-       "shapes are added to the current scale"));
-
+  // Tonelark: the icons alone said nothing. The tools and the shapes are two
+  // rows with a name under each icon (a click on the name is a click on the
+  // icon), a few words say how to use them, and the wavelets, which most
+  // photos never need, are in a closed advanced section.
   g->bt_edit_masks = dt_iop_togglebutton_new
     (self, N_("editing"),
      N_("show and edit shapes on the current scale"),
      N_("show and edit shapes in restricted mode"),
      G_CALLBACK(rt_edit_masks_callback), TRUE, 0, 0,
-     dtgtk_cairo_paint_masks_eye, hbox_shapes);
+     dtgtk_cairo_paint_masks_eye, NULL);
 
   g->bt_brush = dt_iop_togglebutton_new
     (self, N_("shapes"),
      N_("add brush"), N_("add multiple brush strokes"),
      G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
-     dtgtk_cairo_paint_masks_brush, hbox_shapes);
+     dtgtk_cairo_paint_masks_brush, NULL);
 
   g->bt_path = dt_iop_togglebutton_new
     (self, N_("shapes"), N_("add path"), N_("add multiple paths"),
      G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
-     dtgtk_cairo_paint_masks_path, hbox_shapes);
+     dtgtk_cairo_paint_masks_path, NULL);
 
   g->bt_ellipse = dt_iop_togglebutton_new
     (self, N_("shapes"), N_("add ellipse"), N_("add multiple ellipses"),
      G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
-     dtgtk_cairo_paint_masks_ellipse, hbox_shapes);
+     dtgtk_cairo_paint_masks_ellipse, NULL);
 
   g->bt_circle = dt_iop_togglebutton_new
     (self, N_("shapes"), N_("add circle"), N_("add multiple circles"),
      G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
-     dtgtk_cairo_paint_masks_circle, hbox_shapes);
-
-  // algorithm toolbar
-  GtkWidget *hbox_algo = dt_gui_hbox(dt_ui_label_new(_("algorithms:")));
+     dtgtk_cairo_paint_masks_circle, NULL);
 
   g->bt_blur = dt_iop_togglebutton_new(
       self, N_("tools"), N_("activate blur tool"), NULL,
       G_CALLBACK(rt_select_algorithm_callback),
-      TRUE, 0, 0, dtgtk_cairo_paint_tool_blur, hbox_algo);
+      TRUE, 0, 0, dtgtk_cairo_paint_tool_blur, NULL);
 
   g->bt_fill = dt_iop_togglebutton_new(
       self, N_("tools"), N_("activate fill tool"), NULL,
       G_CALLBACK(rt_select_algorithm_callback),
-      TRUE, 0, 0, dtgtk_cairo_paint_tool_fill, hbox_algo);
+      TRUE, 0, 0, dtgtk_cairo_paint_tool_fill, NULL);
 
   g->bt_clone = dt_iop_togglebutton_new(
       self, N_("tools"), N_("activate cloning tool"), NULL,
       G_CALLBACK(rt_select_algorithm_callback),
-      TRUE, 0, 0, dtgtk_cairo_paint_tool_clone, hbox_algo);
+      TRUE, 0, 0, dtgtk_cairo_paint_tool_clone, NULL);
 
   g->bt_heal = dt_iop_togglebutton_new(
       self, N_("tools"), N_("activate healing tool"), NULL,
       G_CALLBACK(rt_select_algorithm_callback),
-      TRUE, 0, 0, dtgtk_cairo_paint_tool_heal, hbox_algo);
+      TRUE, 0, 0, dtgtk_cairo_paint_tool_heal, NULL);
 
-  // overwrite tooltip ourself to handle shift+click
+  // what each one does
   gchar b[1000];
-  gchar *c = _("ctrl+click to change tool for current form");
-  gchar *s = _("shift+click to set the tool as default");
-  gtk_widget_set_tooltip_text(g->bt_blur , dt_buf_printf(b, "%s\n%s\n%s", _("activate blur tool"), c, s));
-  gtk_widget_set_tooltip_text(g->bt_fill , dt_buf_printf(b, "%s\n%s\n%s", _("activate fill tool"), c, s));
-  gtk_widget_set_tooltip_text(g->bt_clone, dt_buf_printf(b, "%s\n%s\n%s", _("activate cloning tool"), c, s));
-  gtk_widget_set_tooltip_text(g->bt_heal , dt_buf_printf(b, "%s\n%s\n%s", _("activate healing tool"), c, s));
+  const gchar *c = _("ctrl+click: give the selected spot this tool");
+  const gchar *s = _("shift+click: start with this tool next time");
+  gtk_widget_set_tooltip_text(g->bt_heal, dt_buf_printf(b, "%s\n%s\n%s",
+    _("heal: cover the spot with pixels from beside it, blended into its light and color\n"
+      "(dust, blemishes, small distractions)"), c, s));
+  gtk_widget_set_tooltip_text(g->bt_clone, dt_buf_printf(b, "%s\n%s\n%s",
+    _("clone: copy the pixels of another place exactly, without blending"), c, s));
+  gtk_widget_set_tooltip_text(g->bt_fill, dt_buf_printf(b, "%s\n%s\n%s",
+    _("fill: erase the details of the area, or paint it with a color"), c, s));
+  gtk_widget_set_tooltip_text(g->bt_blur, dt_buf_printf(b, "%s\n%s\n%s",
+    _("blur: soften the area"), c, s));
+  const gchar *m = _("adds spots until clicked again or the photo is right-clicked\n"
+                     "ctrl+click: add one only");
+  gtk_widget_set_tooltip_text(g->bt_circle, dt_buf_printf(b, "%s\n%s",
+    _("spot: click on the photo to place a round spot, scroll to resize it"), m));
+  gtk_widget_set_tooltip_text(g->bt_ellipse, dt_buf_printf(b, "%s\n%s",
+    _("oval: an oval spot, for long blemishes"), m));
+  gtk_widget_set_tooltip_text(g->bt_path, dt_buf_printf(b, "%s\n%s",
+    _("path: click around the area point by point, close it on the first point"), m));
+  gtk_widget_set_tooltip_text(g->bt_brush, dt_buf_printf(b, "%s\n%s",
+    _("brush: paint over what to remove"), m));
+  gtk_widget_set_tooltip_text(g->bt_edit_masks,
+    _("show the spots on the photo, to select, move or resize them\n"
+      "ctrl+click: only the selected one"));
+
+  GtkWidget *tools_grid = gtk_grid_new();
+  gtk_grid_set_column_homogeneous(GTK_GRID(tools_grid), TRUE);
+  gtk_widget_set_name(tools_grid, "retouch-tools");
+  GtkWidget *tool_buttons[] = { g->bt_heal, g->bt_clone, g->bt_fill, g->bt_blur };
+  const char *tool_names[] = { N_("Heal"), N_("Clone"), N_("Fill"), N_("Blur") };
+  GtkWidget *shape_buttons[] = { g->bt_circle, g->bt_ellipse, g->bt_path, g->bt_brush, g->bt_edit_masks };
+  const char *shape_names[] = { N_("Spot"), N_("Oval"), N_("Path"), N_("Brush"), N_("Show") };
+  rt_named_row(tools_grid, 0, _("Tool"), tool_buttons, tool_names, G_N_ELEMENTS(tool_buttons));
+  rt_named_row(tools_grid, 2, _("Shape"), shape_buttons, shape_names, G_N_ELEMENTS(shape_buttons));
+
+  GtkWidget *hint = gtk_label_new
+    (_("Pick a tool and a shape, then click on the photo, or paint with the brush. "
+       "Heal and clone copy from a second spot beside it: drag that one to choose where from. "
+       "Scroll over a spot to resize it, right-click to stop adding."));
+  gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(hint), 20);
+  gtk_label_set_xalign(GTK_LABEL(hint), 0.0f);
+  gtk_widget_set_name(hint, "retouch-hint");
+
+  // the number of spots
+  g->label_form = GTK_LABEL(gtk_label_new("-1"));
+  gtk_widget_set_margin_start(GTK_WIDGET(g->label_form), DT_PIXEL_APPLY_DPI(4));
+  GtkWidget *hbox_shapes = dt_gui_hbox(dt_ui_label_new(_("spots on this photo:")), g->label_form);
+  gtk_widget_set_tooltip_text(hbox_shapes, _("the spots, strokes and paths of this photo"));
 
   // wavelet decompose bar labels
   GtkWidget *grid_wd_labels = gtk_grid_new();
   gtk_grid_set_column_homogeneous(GTK_GRID(grid_wd_labels), FALSE);
+  gtk_grid_set_column_spacing(GTK_GRID(grid_wd_labels), DT_PIXEL_APPLY_DPI(4));
 
   gtk_grid_attach(GTK_GRID(grid_wd_labels),
-                  dt_ui_label_new(_("scales:")), 0, 0, 1, 1);
+                  dt_ui_label_new(_("layers:")), 0, 0, 1, 1);
   g->lbl_num_scales = GTK_LABEL(dt_ui_label_new(NULL));
   gtk_label_set_width_chars(g->lbl_num_scales, 2);
   gtk_grid_attach(GTK_GRID(grid_wd_labels),
                   GTK_WIDGET(g->lbl_num_scales), 1, 0, 1, 1);
 
   gtk_grid_attach(GTK_GRID(grid_wd_labels),
-                  dt_ui_label_new(_("current:")), 0, 1, 1, 1);
+                  dt_ui_label_new(_("current layer:")), 0, 1, 1, 1);
   g->lbl_curr_scale = GTK_LABEL(dt_ui_label_new(NULL));
   gtk_label_set_width_chars(g->lbl_curr_scale, 2);
   gtk_grid_attach(GTK_GRID(grid_wd_labels),
@@ -2519,11 +2599,10 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_widget_set_tooltip_text
     (g->wd_bar,
-     _("top slider adjusts where the merge scales start\n"
-       "bottom slider adjusts the number of scales\n"
-       "dot indicates the current scale\n"
-       "top line indicates that the scale is visible at current zoom level\n"
-       "bottom line indicates that the scale has shapes on it"));
+     _("the photo split into layers by size of detail, fine on the left, coarse on the right\n"
+       "click a box: the layer new spots go to\n"
+       "bottom slider: the number of layers, top slider: where the coarse layers are merged\n"
+       "a line over a box: the layer is visible at this zoom, under it: it has spots"));
 
   g_signal_connect(G_OBJECT(g->wd_bar), "draw",
                    G_CALLBACK(rt_wdbar_draw), self);
@@ -2613,13 +2692,14 @@ void gui_init(dt_iop_module_t *self)
                                       dt_gui_hbox(dt_gui_expand(gslider), g->bt_auto_levels));
 
   // shapes selected (label)
-  GtkWidget *label1 = gtk_label_new(_("shape selected:"));
+  GtkWidget *label1 = gtk_label_new(_("selected spot:"));
   gtk_label_set_ellipsize(GTK_LABEL(label1), PANGO_ELLIPSIZE_START);
   g->label_form_selected = GTK_LABEL(gtk_label_new("-1"));
+  gtk_widget_set_margin_start(GTK_WIDGET(g->label_form_selected), DT_PIXEL_APPLY_DPI(4));
   GtkWidget *hbox_shape_sel = dt_gui_hbox(label1, g->label_form_selected);
   gtk_widget_set_tooltip_text
     (hbox_shape_sel,
-     _("click on a shape to select it,\nto unselect click on an empty space"));
+     _("click on a spot to select it, on an empty place to unselect it"));
 
   // fill properties
   g->vbox_fill = self->widget = dt_gui_vbox();
@@ -2680,16 +2760,27 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->sl_mask_opacity), "value-changed",
                    G_CALLBACK(rt_mask_opacity_callback), self);
 
+  // the wavelets, closed: a spot works on the whole photo without them
+  GtkWidget *advanced = dt_gui_vbox();
+  dt_gui_new_collapsible_section(&g->cs_wavelets, "plugins/darkroom/retouch/expand_wavelets",
+                                 _("detail layers (advanced)"), GTK_BOX(advanced), DT_ACTION(self));
+  GtkWidget *wd_hint = gtk_label_new
+    (_("Split the photo into layers by size of detail, to retouch one alone "
+       "(the texture of skin without its color). Not needed to remove spots."));
+  gtk_label_set_line_wrap(GTK_LABEL(wd_hint), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(wd_hint), 20);
+  gtk_label_set_xalign(GTK_LABEL(wd_hint), 0.0f);
+  gtk_widget_set_name(wd_hint, "retouch-hint");
+  dt_gui_box_add(g->cs_wavelets.container, wd_hint, grid_wd_labels, g->wd_bar,
+                 dt_gui_hbox(scale_start, dt_gui_expand(scale_middle), dt_gui_expand(scale_end)),
+                 g->vbox_preview_scale);
+
   // start building top level widget
   self->widget = dt_gui_vbox
-    (dt_ui_section_label_new(C_("section", "retouch tools")),
-     hbox_shapes, hbox_algo,
-     dt_ui_section_label_new(C_("section", "wavelet decompose")),
-     grid_wd_labels, g->wd_bar,
-     dt_gui_hbox(scale_start, dt_gui_expand(scale_middle), dt_gui_expand(scale_end)),
-     g->vbox_preview_scale,
-     dt_ui_section_label_new(C_("section", "shapes")),
-     hbox_shape_sel, g->vbox_blur, g->vbox_fill, g->sl_mask_opacity);
+    (tools_grid, hint, hbox_shapes,
+     dt_ui_section_label_new(C_("section", "spot settings")),
+     hbox_shape_sel, g->vbox_blur, g->vbox_fill, g->sl_mask_opacity,
+     advanced);
 
   /* add signal handler for preview pipe finish to redraw the preview */
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED, rt_develop_ui_pipe_finished_callback);

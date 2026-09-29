@@ -294,6 +294,28 @@ box *,
   margin: 0 0.3em 0.1em 2.2em;
 }
 
+/* the remove panel (iop/retouch.c): the names under the tools and shapes,
+   and how to use them */
+#retouch-tools
+{
+  margin: 0.2em 0 0.1em 0;
+}
+
+#retouch-name
+{
+  color: @ls_text_dim;
+  font-size: 0.8em;
+  margin-bottom: 0.25em;
+}
+
+#retouch-hint
+{
+  color: @ls_text_dim;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.82em;
+  margin: 0.2em 0 0.4em 0;
+}
+
 /* masking panel (libs/masking.c) */
 #masking-button
 {
