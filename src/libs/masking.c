@@ -103,6 +103,7 @@ typedef struct dt_lib_masking_t
   char selected[64];          // multi_name of the selected mask, "" none
   _pending_t pending;
   int pending_count;          // shapes of the mask before the pending shape
+  guint idle;                 // the rebuild after the history of a new image
 } dt_lib_masking_t;
 
 const char *name(dt_lib_module_t *self)
@@ -838,6 +839,24 @@ static void _history_changed(gpointer instance, dt_lib_module_t *self)
   _rebuild(self);
 }
 
+static gboolean _rebuild_idle(gpointer user_data)
+{
+  dt_lib_module_t *self = user_data;
+  dt_lib_masking_t *d = self->data;
+  d->idle = 0;
+  _rebuild(self);
+  return G_SOURCE_REMOVE;
+}
+
+// a new image: the darkroom raises the signal before it gives the modules
+// the params of the history, so the list is built again once that is done
+static void _image_changed(gpointer instance, dt_lib_module_t *self)
+{
+  dt_lib_masking_t *d = self->data;
+  _history_changed(instance, self);
+  if(!d->idle) d->idle = g_idle_add(_rebuild_idle, self);
+}
+
 static GtkWidget *_heading(const char *label)
 {
   GtkWidget *l = dt_ui_section_label_new(label);
@@ -1028,12 +1047,14 @@ void gui_init(dt_lib_module_t *self)
   dt_gui_box_add(self->widget, d->selected_box);
 
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_HISTORY_CHANGE, _history_changed);
-  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _history_changed);
-  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _history_changed);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_IMAGE_CHANGED, _image_changed);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_INITIALIZE, _image_changed);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  dt_lib_masking_t *d = self->data;
+  if(d->idle) g_source_remove(d->idle);
   g_free(self->data);
   self->data = NULL;
 }
