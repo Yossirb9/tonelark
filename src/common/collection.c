@@ -80,6 +80,19 @@ static void _collection_update_aspect_ratio(const dt_collection_t *collection);
 
 const dt_collection_t *dt_collection_new(const dt_collection_t *clone)
 {
+  // Tonelark: the first filter of the top bar is the flag filter of the
+  // Lightroom library (the default configuration had the module order), once,
+  // before the first query of the collection
+  if(!clone && !dt_conf_key_exists("lightspeed/filter_flag"))
+  {
+    if(dt_conf_get_int("plugins/lighttable/filtering/item0") == DT_COLLECTION_PROP_ORDER)
+    {
+      dt_conf_set_int("plugins/lighttable/filtering/item0", DT_COLLECTION_PROP_FLAG);
+      dt_conf_set_string("plugins/lighttable/filtering/string0", "");
+    }
+    dt_conf_set_bool("lightspeed/filter_flag", TRUE);
+  }
+
   dt_collection_t *collection = g_malloc0(sizeof(dt_collection_t));
 
   /* initialize collection context*/
@@ -658,6 +671,8 @@ const char *dt_collection_name_untranslated(const dt_collection_properties_t pro
       return N_("duplicates");
     case DT_COLLECTION_PROP_LOCAL_COPY:
       return N_("local copy");
+    case DT_COLLECTION_PROP_FLAG:
+      return N_("flag");
     case DT_COLLECTION_PROP_MODULE:
       return N_("module");
     case DT_COLLECTION_PROP_ORDER:
@@ -1558,6 +1573,23 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
           // clang-format on
       }
       break;
+
+    case DT_COLLECTION_PROP_FLAG: // pick flag (a tag) and reject
+    {
+      const char *picked = "id IN (SELECT ti.imgid FROM main.tagged_images AS ti"
+                           " JOIN data.tags AS t ON t.id = ti.tagid WHERE t.name = 'darktable|pick')";
+      if(!g_strcmp0(escaped_text, "$PICKED"))
+        query = g_strdup_printf("(flags & %d = 0 AND %s) ", DT_IMAGE_REJECTED, picked);
+      else if(!g_strcmp0(escaped_text, "$REJECTED"))
+        query = g_strdup_printf("(flags & %d = %d) ", DT_IMAGE_REJECTED, DT_IMAGE_REJECTED);
+      else if(!g_strcmp0(escaped_text, "$UNFLAGGED"))
+        query = g_strdup_printf("(flags & %d = 0 AND NOT %s) ", DT_IMAGE_REJECTED, picked);
+      else if(!g_strcmp0(escaped_text, "$NOT_REJECTED"))
+        query = g_strdup_printf("(flags & %d = 0) ", DT_IMAGE_REJECTED);
+      else
+        query = g_strdup("1 = 1");
+      break;
+    }
 
     case DT_COLLECTION_PROP_LOCAL_COPY: // local copy
       if(!g_strcmp0(escaped_text, _("not copied locally"))

@@ -215,6 +215,7 @@ typedef struct _filter_t
 #include "libs/filters/iso.c"
 #include "libs/filters/local_copy.c"
 #include "libs/filters/duplicates.c"
+#include "libs/filters/flag.c"
 #include "libs/filters/misc.c"
 #include "libs/filters/module_order.c"
 #include "libs/filters/rating.c"
@@ -243,6 +244,7 @@ static _filter_t filters[]
         { DT_COLLECTION_PROP_GROUP_ID, _misc_widget_init, _misc_update },
         { DT_COLLECTION_PROP_DUPLICATES, _duplicates_widget_init, _duplicates_update },
         { DT_COLLECTION_PROP_LOCAL_COPY, _local_copy_widget_init, _local_copy_update },
+        { DT_COLLECTION_PROP_FLAG, _flag_widget_init, _flag_update },
         { DT_COLLECTION_PROP_HISTORY, _history_widget_init, _history_update },
         { DT_COLLECTION_PROP_ORDER, _module_order_widget_init, _module_order_update },
         { DT_COLLECTION_PROP_RATING, _rating_widget_init, _rating_update },
@@ -293,15 +295,15 @@ void init_presets(dt_lib_module_t *self)
     params.sort[0].order = 0;                                                                                     \
   }
 
-  // initial preset
-  CLEAR_PARAMS(_PRESET_ALL, DT_COLLECTION_PROP_RATING_RANGE, DT_COLLECTION_SORT_DATETIME);
+  // initial preset (Tonelark: the flag, color label and rating filters of the Lightroom library)
+  CLEAR_PARAMS(_PRESET_ALL, DT_COLLECTION_PROP_FLAG, DT_COLLECTION_SORT_DATETIME);
   params.rules = 3;
   params.rule[0].topbar = 1;
   params.rule[1].item = DT_COLLECTION_PROP_COLORLABEL;
   params.rule[1].mode = 0;
   params.rule[1].off = 0;
   params.rule[1].topbar = 1;
-  params.rule[2].item = DT_COLLECTION_PROP_TEXTSEARCH;
+  params.rule[2].item = DT_COLLECTION_PROP_RATING_RANGE;
   params.rule[2].mode = 0;
   params.rule[2].off = 0;
   params.rule[2].topbar = 1;
@@ -896,6 +898,7 @@ static gboolean _rule_show_popup(GtkWidget *widget, dt_lib_filtering_rule_t *rul
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_RATING_RANGE);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_RATING);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_COLORLABEL);
+  ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_FLAG);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_TEXTSEARCH);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_GEOTAGGING);
 
@@ -957,6 +960,7 @@ static void _populate_rules_combo(GtkWidget *w)
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_RATING_RANGE);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_RATING);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_COLORLABEL);
+  ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FLAG);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_TEXTSEARCH);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_GEOTAGGING);
 
@@ -1629,6 +1633,7 @@ static void _topbar_populate_rules_combo(GtkWidget *w, dt_lib_filtering_t *d)
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_RATING_RANGE);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_RATING);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_COLORLABEL);
+  ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FLAG);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_TEXTSEARCH);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_GEOTAGGING);
   // if we have not added any entry, remove the section
