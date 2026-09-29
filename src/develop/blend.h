@@ -507,6 +507,14 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module);
 void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module);
 void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module);
 
+/** Tonelark masking panel: the actions of the mask buttons of a module */
+// start drawing a new shape (brush, gradient, ellipse, object...) for the module
+gboolean dt_iop_gui_blend_add_shape(dt_iop_module_t *module, const int shape_type);
+// add a mask mode (drawn and/or parametric) to the module
+void dt_iop_gui_blend_add_mask_mode(dt_iop_module_t *module, const int mask_mode);
+// the module uses the mask of source (a module before it in the pipe) as raster mask
+void dt_iop_gui_blend_use_raster(dt_iop_module_t *module, dt_iop_module_t *source);
+
 gboolean blend_color_picker_apply(dt_iop_module_t *module,
                                   GtkWidget *picker,
                                   dt_dev_pixelpipe_t *pipe);

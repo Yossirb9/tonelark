@@ -284,6 +284,49 @@ box *,
   padding-top: 0.2em;
 }
 
+/* what a module does, under its name (All tools) */
+#iop-panel-about
+{
+  color: @ls_text_dim;
+  font-family: "Segoe UI", sans-serif;
+  font-weight: normal;
+  font-size: 0.82em;
+  margin: 0 0.3em 0.1em 2.2em;
+}
+
+/* masking panel (libs/masking.c) */
+#masking-button
+{
+  padding: 0.15em 0.2em;
+  min-height: 1.6em;
+}
+
+#masking-row,
+#masking-row-selected
+{
+  padding: 0.15em 0.5em;
+  border-radius: 2px;
+}
+
+#masking-row-selected
+{
+  background-image: none;
+  background-color: #5d6b80;
+  color: #ffffff;
+}
+
+#masking-row-selected label
+{
+  color: #ffffff;
+}
+
+#masking-title
+{
+  color: #e6e6e6;
+  font-family: "Segoe UI Semibold", "Segoe UI", sans-serif;
+  margin: 0.4em 0 0.2em 0;
+}
+
 /* ----------------------------------------------- Lightroom basic panel */
 
 #basicpanel

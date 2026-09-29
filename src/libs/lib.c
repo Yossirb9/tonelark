@@ -668,7 +668,8 @@ uint32_t dt_lib_get_container(dt_lib_module_t *module)
   // except for the Lightroom-style basic panel which sits on top of them
   if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER
      && dt_view_get_current() == DT_VIEW_DARKROOM
-     && g_strcmp0(module->plugin_name, "basicpanel"))
+     && g_strcmp0(module->plugin_name, "basicpanel")
+     && g_strcmp0(module->plugin_name, "masking"))
     container = DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 
   return container;

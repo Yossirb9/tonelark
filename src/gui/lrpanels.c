@@ -144,6 +144,113 @@ static const struct { const char *op, *title; } _titles[] =
   { "toneequal",       N_("Tone Equalizer") },
 };
 
+// what each module does, in a few words, under its name in the headers
+static const struct { const char *op, *about; } _abouts[] =
+{
+  // light & tone
+  { "exposure",        N_("brighten or darken the whole photo") },
+  { "toneequal",       N_("brighten or darken ranges of tones (dodge & burn)") },
+  { "shadhi",          N_("recover the shadows and the highlights") },
+  { "highlights",      N_("rebuild blown-out highlights") },
+  { "rgbcurve",        N_("curves for the tones and each color channel") },
+  { "tonecurve",       N_("the classic tone curve (curves of imported catalogs)") },
+  { "rgblevels",       N_("set the black, gray and white points") },
+  { "levels",          N_("set the black, gray and white points (older module)") },
+  { "bilat",           N_("local contrast, like Clarity and Texture") },
+  { "atrous",          N_("contrast and sharpness by size of detail") },
+  { "sigmoid",         N_("tone mapping: fit the scene to the screen, smooth") },
+  { "filmicrgb",       N_("tone mapping like film: fit the scene to the screen") },
+  { "agx",             N_("tone mapping (AgX): fit the scene to the screen") },
+  { "basecurve",       N_("camera-like tone curve (older workflow)") },
+  { "negadoctor",      N_("turn scanned film negatives into positives") },
+  { "filmic",          N_("older filmic tone mapping") },
+  { "globaltonemap",   N_("older global tone mapping") },
+  { "tonemap",         N_("older local tone mapping") },
+  { "zonesystem",      N_("older zone system tone control") },
+  { "relight",         N_("older fill light") },
+  { "invert",          N_("older negative inversion") },
+  { "basicadj",        N_("older basic adjustments") },
+  { "colisa",          N_("older contrast, brightness and saturation") },
+  { "clahe",           N_("older local contrast") },
+  { "equalizer",       N_("older equalizer") },
+  // color
+  { "channelmixerrgb", N_("white balance, channel mixer and black & white") },
+  { "temperature",     N_("the white balance of the raw file") },
+  { "colorbalancergb", N_("color grading of shadows, midtones and highlights") },
+  { "colorequal",      N_("hue, saturation and brightness of each color (HSL)") },
+  { "colorzones",      N_("change colors by zones of hue, lightness or chroma") },
+  { "primaries",       N_("shift the red, green and blue primaries (Calibration)") },
+  { "velvia",          N_("boost the saturation of the weak colors") },
+  { "vibrance",        N_("older vibrance") },
+  { "colorcorrection", N_("tint the shadows and the highlights") },
+  { "colorcontrast",   N_("more or less contrast between colors") },
+  { "colorharmonizer", N_("pull the colors toward a color harmony") },
+  { "colorize",        N_("tint the whole photo with one color") },
+  { "monochrome",      N_("black & white with a color filter") },
+  { "splittoning",     N_("split toning (older module)") },
+  { "lut3d",           N_("apply a 3D LUT, e.g. a film look") },
+  { "colorchecker",    N_("color look-up table and camera profiling") },
+  { "colormapping",    N_("take the colors of another photo") },
+  { "colortransfer",   N_("older color transfer") },
+  { "colorbalance",    N_("lift, gamma and gain color balance (older module)") },
+  { "channelmixer",    N_("older channel mixer") },
+  { "colorreconstruct", N_("rebuild the colors of blown-out highlights") },
+  // detail and noise
+  { "sharpen",         N_("sharpen the details") },
+  { "diffuse",         N_("sharpen, remove blur or add bloom") },
+  { "denoiseprofile",  N_("reduce noise, using the profile of the camera") },
+  { "nlmeans",         N_("strong noise reduction (astro, high ISO)") },
+  { "rawdenoise",      N_("reduce noise in the raw data") },
+  { "bilateral",       N_("smooth surfaces and keep the edges") },
+  { "hotpixels",       N_("remove stuck and hot pixels") },
+  { "hazeremoval",     N_("remove fog and haze (Dehaze)") },
+  // lens and geometry
+  { "lens",            N_("correct lens distortion, vignetting and fringes") },
+  { "cacorrectrgb",    N_("remove color fringes (chromatic aberration)") },
+  { "cacorrect",       N_("remove chromatic aberration in the raw data") },
+  { "defringe",        N_("remove purple fringes") },
+  { "ashift",          N_("straighten horizons and fix perspective (Upright)") },
+  { "crop",            N_("crop and set the aspect ratio") },
+  { "clipping",        N_("crop and rotate (older module)") },
+  { "flip",            N_("rotate by 90° and flip") },
+  { "scalepixels",     N_("fix photos with non-square pixels") },
+  { "enlargecanvas",   N_("add space around the photo") },
+  // retouch
+  { "retouch",         N_("heal, clone, fill and blur spots and blemishes") },
+  { "spots",           N_("spot removal (older module)") },
+  { "liquify",         N_("push, pull and warp parts of the photo") },
+  // effects
+  { "vignette",        N_("darken or lighten the corners") },
+  { "grain",           N_("add film grain") },
+  { "bloom",           N_("glow around the bright areas") },
+  { "soften",          N_("soft, dreamy glow (Orton effect)") },
+  { "blurs",           N_("lens, motion or gaussian blur") },
+  { "lowlight",        N_("look like night vision") },
+  { "lowpass",         N_("blur, for local contrast tricks") },
+  { "highpass",        N_("keep only the fine detail, for sharpening tricks") },
+  { "graduatednd",     N_("graduated filter, e.g. to darken the sky") },
+  { "borders",         N_("add a frame or a border") },
+  { "watermark",       N_("add a watermark or a signature") },
+  { "overlay",         N_("put another photo on top") },
+  { "censorize",       N_("pixelate or blur parts to hide them") },
+  // technical
+  { "rawprepare",      N_("black and white levels of the raw file") },
+  { "demosaic",        N_("turn the raw data into color pixels") },
+  { "colorin",         N_("the input color profile") },
+  { "colorout",        N_("the output color profile") },
+  { "dither",          N_("prevent banding in smooth gradients") },
+  { "profile_gamma",   N_("fix photos with a log or an unusual profile") },
+  { "rasterfile",      N_("use a mask from an image file") },
+};
+
+const char *dt_lrp_module_about(const char *op)
+{
+  if(!op || !dt_lrp_names()) return NULL;
+  for(int i = 0; i < G_N_ELEMENTS(_abouts); i++)
+    if(!strcmp(_abouts[i].op, op)) return _(_abouts[i].about);
+  return NULL;
+}
+
 // the menu headers of the right panel, [tab][section]
 // (the most sections of a tab, checked below)
 #define MAX_SECTIONS 16
@@ -243,10 +350,17 @@ static gboolean _is_alt(const _section_t *sec, const char *op)
   return _rank(sec, op) >= MAX_OPS;
 }
 
+gboolean dt_lrp_is_mask(const dt_iop_module_t *module)
+{
+  return module && g_str_has_prefix(module->multi_name, "Mask ");
+}
+
 // the section of a module in the tab, -1 if none (the tools tab puts the
 // modules that are in no menu in its last one)
 static int _section(const int tab, const dt_iop_module_t *module)
 {
+  // the modules of the masks belong to the masking panel in develop
+  if(tab == 0 && dt_lrp_is_mask(module)) return -1;
   const _tab_t *t = &_tabs[tab];
   for(int s = 0; s < t->n; s++)
     if(_rank(&t->sections[s], module->op) >= 0) return s;
@@ -441,8 +555,20 @@ static void _hide_headers(const int except_tab)
 
 static void _hide_module(dt_iop_module_t *module)
 {
-  if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+  // a mask keeps the focus while the masking panel edits it
+  if(darktable.develop->gui_module == module && !dt_lrp_is_mask(module)) dt_iop_request_focus(NULL);
   gtk_widget_hide(module->expander);
+}
+
+// the widget of a lib placed by the layout (the masking panel)
+static GtkWidget *_lib_widget(GtkBox *panel, const char *flag)
+{
+  GtkWidget *found = NULL;
+  GList *children = gtk_container_get_children(GTK_CONTAINER(panel));
+  for(const GList *c = children; c && !found; c = g_list_next(c))
+    if(g_object_get_data(G_OBJECT(c->data), flag)) found = c->data;
+  g_list_free(children);
+  return found;
 }
 
 // the module is shown in the tab when its menu is open (as the module groups
@@ -611,6 +737,12 @@ void dt_lrp_update(const int tab)
   {
     // no menus: the modules with their headers, in the order of the panels
     _hide_headers(-1);
+    GtkWidget *masking = _lib_widget(panel, "dt-lrp-masking");
+    if(masking)
+    {
+      gtk_widget_set_no_show_all(masking, TRUE);
+      gtk_widget_hide(masking);
+    }
     int pos = _pin_top(panel, 0);
     GList *modules = g_list_sort(g_list_reverse(g_list_copy(darktable.develop->iop)), _flat_cmp);
     for(const GList *m = modules; m; m = g_list_next(m))
@@ -629,8 +761,16 @@ void dt_lrp_update(const int tab)
   const _tab_t *t = &_tabs[tab];
   int pos = 0;
   // develop: the tools of Lightroom's tool strip above the basic panel
+  // (crop, remove, masking)
   for(int s = 0; s < t->n; s++)
     if(t->sections[s].top) pos = _section_update(panel, tab, s, pos);
+  GtkWidget *masking = _lib_widget(panel, "dt-lrp-masking");
+  if(masking)
+  {
+    gtk_widget_set_no_show_all(masking, tab != 0);
+    gtk_widget_set_visible(masking, tab == 0);
+    gtk_box_reorder_child(panel, masking, pos++);
+  }
   pos = _pin_top(panel, pos);
   for(int s = 0; s < t->n; s++)
     if(!t->sections[s].top) pos = _section_update(panel, tab, s, pos);

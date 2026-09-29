@@ -966,7 +966,9 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
       }
       else
       {
-        if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+        // (a mask of the masking panel keeps the focus while it is edited)
+        if(darktable.develop->gui_module == module && !dt_lrp_is_mask(module))
+          dt_iop_request_focus(NULL);
         if(w) gtk_widget_hide(w);
       }
 

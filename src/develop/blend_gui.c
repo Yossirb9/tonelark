@@ -1662,6 +1662,42 @@ static gboolean _blendop_masks_add_shape(GtkWidget *widget,
   return TRUE;
 }
 
+gboolean dt_iop_gui_blend_add_shape(dt_iop_module_t *module, const int shape_type)
+{
+  dt_iop_gui_blend_data_t *bd = module ? module->blend_data : NULL;
+  if(!bd || !bd->masks_support) return FALSE;
+  for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
+    if(bd->masks_type[n] == shape_type && bd->masks_shapes[n])
+    {
+      GdkEventButton event = { .type = GDK_BUTTON_PRESS, .button = GDK_BUTTON_PRIMARY };
+      _blendop_masks_add_shape(bd->masks_shapes[n], &event, module);
+      return TRUE;
+    }
+  return FALSE;
+}
+
+void dt_iop_gui_blend_add_mask_mode(dt_iop_module_t *module, const int mask_mode)
+{
+  if(module && module->blend_data)
+    _blendop_masks_modes_toggle(NULL, module, mask_mode);
+}
+
+void dt_iop_gui_blend_use_raster(dt_iop_module_t *module, dt_iop_module_t *source)
+{
+  if(!module || !source) return;
+  // as choosing the mask of source in the raster mask combobox
+  dt_develop_blend_params_t bp = *module->blend_params;
+  bp.mask_mode = DEVELOP_MASK_ENABLED | DEVELOP_MASK_RASTER;
+  g_strlcpy(bp.raster_mask_source, source->op, sizeof(bp.raster_mask_source));
+  bp.raster_mask_instance = source->multi_priority;
+  bp.raster_mask_id = BLEND_RASTER_ID;
+  const gboolean reprocess = !dt_iop_is_raster_mask_used(source, BLEND_RASTER_ID);
+  dt_iop_commit_blend_params(module, &bp);
+  dt_iop_gui_update_blending(module);
+  dt_dev_add_history_item(module->dev, module, TRUE);
+  if(reprocess) dt_dev_reprocess_all(module->dev);
+}
+
 static gboolean _blendop_masks_show_and_edit(GtkWidget *widget,
                                              GdkEventButton *event,
                                              dt_iop_module_t *self)

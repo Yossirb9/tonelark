@@ -108,8 +108,9 @@ void gui_init(dt_lib_module_t *self)
   const gboolean gimping =  dt_check_gimpmode("file");
 
   // Lightroom-style module picker: every view is a label in one row,
-  // ordered like Library | Develop | Map | Slideshow | Print
-  static const char *order[] = { "lighttable", "darkroom", "map", "slideshow",
+  // ordered like Library | Develop | Slideshow | Print. Tonelark has no
+  // map in it (the map view is still there for its shortcut).
+  static const char *order[] = { "lighttable", "darkroom", "slideshow",
                                  "print", "tethering", NULL };
   GList *views = NULL;
   for(int k = 0; order[k]; k++)
@@ -119,7 +120,9 @@ void gui_init(dt_lib_module_t *self)
       if(!g_strcmp0(view->module_name, order[k])) views = g_list_append(views, view);
     }
   for(GList *view_iter = darktable.view_manager->views; view_iter; view_iter = g_list_next(view_iter))
-    if(!g_list_find(views, view_iter->data)) views = g_list_append(views, view_iter->data);
+    if(!g_list_find(views, view_iter->data)
+       && g_strcmp0(((dt_view_t *)view_iter->data)->module_name, "map"))
+      views = g_list_append(views, view_iter->data);
 
   for(GList *view_iter = views; view_iter; view_iter = g_list_next(view_iter))
   {

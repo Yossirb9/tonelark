@@ -27,8 +27,13 @@ gboolean dt_lrp_names(void);
 // the panels are shown: the preference and the Tonelark module group layout
 gboolean dt_lrp_enabled(void);
 
+// a module of a mask of the masking panel (named "Mask N")
+gboolean dt_lrp_is_mask(const struct dt_iop_module_t *module);
+
 // the Lightroom name of a module (translated), NULL if it keeps its name
 const char *dt_lrp_module_title(const char *op);
+// what the module does, in a few words (translated), NULL if unknown
+const char *dt_lrp_module_about(const char *op);
 // a module name in title case like the Lightroom panels ("rgb levels" -> "RGB Levels")
 gchar *dt_lrp_title_case(const char *name);
 

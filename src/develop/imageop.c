@@ -3169,8 +3169,26 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name(GTK_WIDGET(header), "module-header");
 
+  // Tonelark: what the module does, in a few words, on a line under the header
+  const char *about = dt_lrp_module_about(module->op);
+  GtkWidget *head = header;
+  if(about)
+  {
+    head = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_name(head, "module-header");
+    gtk_widget_set_name(header, "module-header-row");
+    gtk_box_pack_start(GTK_BOX(head), header, FALSE, FALSE, 0);
+    GtkWidget *al = gtk_label_new(about);
+    gtk_widget_set_name(al, "iop-panel-about");
+    gtk_label_set_line_wrap(GTK_LABEL(al), TRUE);
+    gtk_label_set_line_wrap_mode(GTK_LABEL(al), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_max_width_chars(GTK_LABEL(al), 1);
+    g_object_set(G_OBJECT(al), "xalign", 0.0, (gchar *)0);
+    gtk_box_pack_start(GTK_BOX(head), al, FALSE, FALSE, 0);
+  }
+
   GtkWidget *iopw = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  GtkWidget *expander = dtgtk_expander_new(header, iopw);
+  GtkWidget *expander = dtgtk_expander_new(head, iopw);
   gtk_widget_set_name(expander, "iop-expander");
 
   GtkWidget *header_evb = dtgtk_expander_get_header_event_box(DTGTK_EXPANDER(expander));
