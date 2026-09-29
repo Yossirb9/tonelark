@@ -213,6 +213,54 @@ FACES = Faces()
 SFACE = os.path.join(MODELS, 'face_recognition_sface_2021dec.onnx')
 
 
+FACE_SIDE = 2400         # the faces are looked for in the photo at this size
+
+
+def _iou(a, b):
+    ax, ay, aw, ah = a[:4]
+    bx, by, bw, bh = b[:4]
+    iw = max(0.0, min(ax + aw, bx + bw) - max(ax, bx))
+    ih = max(0.0, min(ay + ah, by + bh) - max(ay, by))
+    inter = iw * ih
+    return inter / (aw * ah + bw * bh - inter + 1e-6)
+
+
+def _detect_faces(img8):
+    """the faces of the photo at two sizes, the photo itself for the small
+    faces and a small copy for the big ones (close-ups), the same face kept
+    once: YuNet rows (box, 5 landmarks, score) in the pixels of img8"""
+    h, w = img8.shape[:2]
+    found = []
+    for side in (max(h, w), 800):
+        im, s = downscale(img8, side)
+        ih, iw = im.shape[:2]
+        det = cv2.FaceDetectorYN.create(YUNET, '', (iw, ih), 0.6, 0.3, 5000)
+        _, faces = det.detect(im)
+        if faces is None:
+            continue
+        for f in faces:
+            r = np.array(f, dtype=np.float32)
+            r[:14] /= s
+            found.append(r)
+    found.sort(key=lambda r: -float(r[14]))
+    kept = []
+    for r in found:
+        if all(_iou(r, k) < 0.3 for k in kept):
+            kept.append(r)
+    return kept
+
+
+def _even_light(img8):
+    """a dark face brighter (a gamma): its embedding is closer to the ones of
+    the same person in good light"""
+    g = float(cv2.cvtColor(img8, cv2.COLOR_BGR2GRAY).mean())
+    if g >= 85:
+        return img8
+    gamma = math.log(110 / 255.0) / math.log(max(g, 8.0) / 255.0)
+    lut = np.array([min(255, int(((i / 255.0) ** gamma) * 255 + 0.5)) for i in range(256)], np.uint8)
+    return cv2.LUT(img8, lut)
+
+
 def cmd_faces(req):
     """the people of the photos: every face big enough to be recognised, with
     its box (0..1 of the photo), an embedding of 128 numbers (SFace, the same
@@ -225,19 +273,21 @@ def cmd_faces(req):
     for k, im in enumerate(images):
         progress(k / max(1, len(images)), 'looking for faces %d/%d' % (k + 1, len(images)))
         try:
-            img8, _ = downscale(to8(imread(im['path'], cv2.IMREAD_COLOR)), ANALYSIS_SIDE)
+            img8, _ = downscale(to8(imread(im['path'], cv2.IMREAD_COLOR)), FACE_SIDE)
         except Exception as e:     # noqa: BLE001
             errors.append('%s: %s' % (im.get('id'), e))
             continue
         h, w = img8.shape[:2]
         faces = []
-        for f in FACES.detect(img8):
-            x, y, fw, fh = f['box']
-            # small or unsure faces give embeddings that mix people up
-            if fw < 40 or fh < 40 or f['score'] < 0.8:
+        for row in _detect_faces(img8):
+            x, y, fw, fh = [float(v) for v in row[:4]]
+            score = float(row[14])
+            # tiny or unsure faces give embeddings that mix people up
+            if fw < 28 or fh < 28 or score < 0.7:
                 continue
-            row = np.array([x, y, fw, fh] + list(f['lm'].reshape(-1)) + [f['score']], dtype=np.float32)
             aligned = rec.alignCrop(img8, row)
+            light = float(cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY).mean()) / 255.0
+            aligned = _even_light(aligned)
             emb = rec.feature(aligned).reshape(-1).astype(np.float32)
             n = float(np.linalg.norm(emb))
             if n <= 0:
@@ -248,11 +298,13 @@ def cmd_faces(req):
             cx, cy = x + fw / 2.0, y + fh / 2.0
             x0, y0 = int(max(0, cx - side / 2)), int(max(0, cy - side / 2))
             x1, y1 = int(min(w, x0 + side)), int(min(h, y0 + side))
-            crop = img8[y0:y1, x0:x1]
+            crop = _even_light(img8[y0:y1, x0:x1])
             thumb = cv2.resize(crop, (96, 96), interpolation=cv2.INTER_AREA)
             ok, jpg = cv2.imencode('.jpg', thumb, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            faces.append(dict(box=[x / w, y / h, fw / w, fh / h], score=f['score'],
-                              sharp=Faces.sharpness(img8, f),
+            face = dict(box=[x, y, fw, fh])
+            faces.append(dict(box=[x / w, y / h, fw / w, fh / h], score=score, light=light,
+                              px=float(min(fw, fh)),
+                              sharp=Faces.sharpness(img8, face),
                               emb=base64.b64encode(emb.tobytes()).decode('ascii'),
                               thumb=base64.b64encode(jpg.tobytes()).decode('ascii') if ok else ''))
         out.append(dict(id=im['id'], faces=faces))

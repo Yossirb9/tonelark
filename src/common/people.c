@@ -21,9 +21,8 @@
   for the panel, and the chat bridge). All of it on this computer.
 
   A face has an embedding of 128 numbers (SFace, from the AI helper); the
-  faces of one person have close embeddings. A face of no one joins the
-  person whose mean face is closest, the faces of no one close to each other
-  become a new person, and two unnamed people too close to be two are one.
+  faces of one person have close embeddings. The faces are grouped by the
+  mean face of each group (see dt_people_cluster).
 
   The tables, in the library:
     ls_faces       a face: photo, box (0..1), embedding, thumbnail, person
@@ -39,7 +38,12 @@
 #include "common/database.h"
 #include "common/debug.h"
 #include "common/image.h"
+#include "common/image_cache.h"
+#include "common/lightspeed_ai.h"
 #include "common/tags.h"
+#include "develop/imageop_math.h"
+#include "imageio/imageio_common.h"
+#include "imageio/imageio_jpeg.h"
 #include "control/control.h"
 #include "control/signal.h"
 
@@ -47,9 +51,8 @@
 #include <string.h>
 
 #define EMB 128
-#define T_ASSIGN 0.40f        // a face and the mean face of a person: the same person
-#define T_GROUP 0.48f         // two faces of no one: the same person
-#define T_MERGE 0.55f         // two people: the same person
+#define T_JOIN 0.50f          // a face and the mean face of a group: the same person
+#define T_MERGE 0.58f         // the mean faces of two groups: the same person
 
 // ---------------------------------------------------------------------------
 // the tables
@@ -177,15 +180,34 @@ void dt_people_sync(GHashTable *people)
 }
 
 // ---------------------------------------------------------------------------
-// the people of the faces
+// the people of the faces. A group is known by its mean face, not by its
+// closest face: with the closest one, A close to B close to C put A with C
+// (children look alike to the model). The faces of no one, the best first,
+// join the group whose mean face is closest (the people and the groups made
+// on the way), else start a group; then each face goes to the closest mean
+// face, a few times; then two unnamed groups too close to be two are one.
+// A group of two photos or more is a person, a person is once in a photo, and
+// never one the user said a face is not.
 
 typedef struct _face_t
 {
   gint64 id;
   dt_imgid_t img;
-  int person;
+  int person;                  // in the library before, 0 none
+  int group;                   // index of its group, -1 none
+  gboolean fixed;              // had a person: stays in it
+  float q;                     // the best faces first
   float e[EMB];
 } _face_t;
+
+typedef struct _group_t
+{
+  int person;                  // 0: a new group
+  gboolean named;
+  int count;
+  float sum[EMB], c[EMB];
+  GHashTable *imgs;            // photo -> number of its faces in the group
+} _group_t;
 
 static inline float _dot(const float *a, const float *b)
 {
@@ -201,35 +223,63 @@ static void _normalize(float *v)
     for(int k = 0; k < EMB; k++) v[k] /= n;
 }
 
-static int _find(int *parent, int i)
-{
-  while(parent[i] != i)
-  {
-    parent[i] = parent[parent[i]];
-    i = parent[i];
-  }
-  return i;
-}
-
 static gint64 _pair(const gint64 face, const int person)
 {
   return face * 1000003 + person;
 }
 
-typedef struct _person_t
+static void _group_add(_group_t *g, const _face_t *f, const int sign)
 {
-  int id;
-  gboolean named;
-  int count;
-  float c[EMB];
-  GHashTable *imgs;            // the photos of the person
-} _person_t;
+  for(int k = 0; k < EMB; k++) g->sum[k] += sign * f->e[k];
+  g->count += sign;
+  const int n = GPOINTER_TO_INT(g_hash_table_lookup(g->imgs, GINT_TO_POINTER(f->img))) + sign;
+  if(n > 0)
+    g_hash_table_insert(g->imgs, GINT_TO_POINTER(f->img), GINT_TO_POINTER(n));
+  else
+    g_hash_table_remove(g->imgs, GINT_TO_POINTER(f->img));
+  memcpy(g->c, g->sum, sizeof(g->c));
+  _normalize(g->c);
+}
 
-static void _person_free(gpointer data)
+static void _group_free(gpointer data)
 {
-  _person_t *p = data;
-  g_hash_table_destroy(p->imgs);
-  g_free(p);
+  _group_t *g = data;
+  g_hash_table_destroy(g->imgs);
+  g_free(g);
+}
+
+// the closest group a face can be in, and how close (-1 none)
+static int _closest(GPtrArray *groups, const _face_t *f, GHashTable *nots, float *sim)
+{
+  int best = -1;
+  *sim = -1.0f;
+  for(guint k = 0; k < groups->len; k++)
+  {
+    _group_t *g = g_ptr_array_index(groups, k);
+    if(!g->count) continue;
+    // once in a photo: another face of it in the group
+    const int here = GPOINTER_TO_INT(g_hash_table_lookup(g->imgs, GINT_TO_POINTER(f->img)));
+    if(here > ((int)k == f->group ? 1 : 0)) continue;
+    if(g->person)
+    {
+      const gint64 key = _pair(f->id, g->person);
+      if(g_hash_table_contains(nots, &key)) continue;
+    }
+    const float s = _dot(f->e, g->c);
+    if(s > *sim)
+    {
+      *sim = s;
+      best = k;
+    }
+  }
+  return best;
+}
+
+static gint _face_cmp(gconstpointer a, gconstpointer b, gpointer faces)
+{
+  const _face_t *fa = &g_array_index((GArray *)faces, _face_t, *(const guint *)a);
+  const _face_t *fb = &g_array_index((GArray *)faces, _face_t, *(const guint *)b);
+  return fa->q > fb->q ? -1 : fa->q < fb->q ? 1 : 0;
 }
 
 // the faces of no one join the people, or become new people; returns the
@@ -238,20 +288,46 @@ GHashTable *dt_people_cluster(void)
 {
   GHashTable *changed = g_hash_table_new(g_direct_hash, g_direct_equal);
   sqlite3 *db = _db();
+  sqlite3_stmt *stmt;
+
+  // the people as groups
+  GPtrArray *groups = g_ptr_array_new_with_free_func(_group_free);
+  GHashTable *of_person = g_hash_table_new(g_direct_hash, g_direct_equal);
+  DT_DEBUG_SQLITE3_PREPARE_V2(db, "SELECT id, name IS NOT NULL FROM main.ls_people", -1, &stmt, NULL);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    _group_t *g = g_malloc0(sizeof(_group_t));
+    g->person = sqlite3_column_int(stmt, 0);
+    g->named = sqlite3_column_int(stmt, 1);
+    g->imgs = g_hash_table_new(g_direct_hash, g_direct_equal);
+    g_hash_table_insert(of_person, GINT_TO_POINTER(g->person), GINT_TO_POINTER(groups->len));
+    g_ptr_array_add(groups, g);
+  }
+  sqlite3_finalize(stmt);
 
   // the faces
   GArray *faces = g_array_new(FALSE, TRUE, sizeof(_face_t));
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(db, "SELECT id, imgid, IFNULL(person, 0), emb FROM main.ls_faces", -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(db, "SELECT id, imgid, IFNULL(person, 0), emb, score * w * h FROM main.ls_faces",
+                              -1, &stmt, NULL);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     if(sqlite3_column_bytes(stmt, 3) != EMB * sizeof(float)) continue;
-    _face_t f;
+    _face_t f = { 0 };
     f.id = sqlite3_column_int64(stmt, 0);
     f.img = sqlite3_column_int(stmt, 1);
     f.person = sqlite3_column_int(stmt, 2);
+    f.q = sqlite3_column_double(stmt, 4);
+    f.group = -1;
     memcpy(f.e, sqlite3_column_blob(stmt, 3), EMB * sizeof(float));
+    if(f.person && g_hash_table_contains(of_person, GINT_TO_POINTER(f.person)))
+    {
+      f.group = GPOINTER_TO_INT(g_hash_table_lookup(of_person, GINT_TO_POINTER(f.person)));
+      f.fixed = TRUE;
+    }
+    else
+      f.person = 0;
     g_array_append_val(faces, f);
+    if(f.group >= 0) _group_add(g_ptr_array_index(groups, f.group), &g_array_index(faces, _face_t, faces->len - 1), 1);
   }
   sqlite3_finalize(stmt);
 
@@ -265,219 +341,138 @@ GHashTable *dt_people_cluster(void)
   }
   sqlite3_finalize(stmt);
 
-  // the people: the mean of their faces, their photos
-  GHashTable *people = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _person_free);
-  DT_DEBUG_SQLITE3_PREPARE_V2(db, "SELECT id, name IS NOT NULL FROM main.ls_people", -1, &stmt, NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    _person_t *p = g_malloc0(sizeof(_person_t));
-    p->id = sqlite3_column_int(stmt, 0);
-    p->named = sqlite3_column_int(stmt, 1);
-    p->imgs = g_hash_table_new(g_direct_hash, g_direct_equal);
-    g_hash_table_insert(people, GINT_TO_POINTER(p->id), p);
-  }
-  sqlite3_finalize(stmt);
+  // 1. the faces of no one, the best first: into the closest group, else a new one
+  GArray *todo = g_array_new(FALSE, FALSE, sizeof(guint));
   for(guint i = 0; i < faces->len; i++)
+    if(!g_array_index(faces, _face_t, i).fixed) g_array_append_val(todo, i);
+  g_array_sort_with_data(todo, _face_cmp, faces);
+  for(guint t = 0; t < todo->len; t++)
   {
-    _face_t *f = &g_array_index(faces, _face_t, i);
-    _person_t *p = f->person ? g_hash_table_lookup(people, GINT_TO_POINTER(f->person)) : NULL;
-    if(!p)
+    _face_t *f = &g_array_index(faces, _face_t, g_array_index(todo, guint, t));
+    float sim;
+    int best = _closest(groups, f, nots, &sim);
+    if(best < 0 || sim < T_JOIN)
     {
-      f->person = 0;
-      continue;
+      _group_t *g = g_malloc0(sizeof(_group_t));
+      g->imgs = g_hash_table_new(g_direct_hash, g_direct_equal);
+      g_ptr_array_add(groups, g);
+      best = groups->len - 1;
     }
-    for(int k = 0; k < EMB; k++) p->c[k] += f->e[k];
-    p->count++;
-    g_hash_table_add(p->imgs, GINT_TO_POINTER(f->img));
-  }
-  GHashTableIter it;
-  gpointer key, value;
-  g_hash_table_iter_init(&it, people);
-  while(g_hash_table_iter_next(&it, &key, &value)) _normalize(((_person_t *)value)->c);
-
-  sqlite3_stmt *upd;
-  DT_DEBUG_SQLITE3_PREPARE_V2(db, "UPDATE main.ls_faces SET person = ?2 WHERE id = ?1", -1, &upd, NULL);
-#define SET_PERSON(face, pid)                                                                                    \
-  {                                                                                                              \
-    DT_DEBUG_SQLITE3_BIND_INT64(upd, 1, (face)->id);                                                             \
-    DT_DEBUG_SQLITE3_BIND_INT(upd, 2, pid);                                                                      \
-    sqlite3_step(upd);                                                                                           \
-    sqlite3_reset(upd);                                                                                          \
-    (face)->person = pid;                                                                                        \
-    g_hash_table_add(changed, GINT_TO_POINTER(pid));                                                             \
+    f->group = best;
+    _group_add(g_ptr_array_index(groups, best), f, 1);
   }
 
-  dt_database_start_transaction(darktable.db);
-
-  // 1. a face of no one joins the closest person: not one it is told it is
-  // not, not one already in its photo
-  for(guint i = 0; i < faces->len; i++)
+  // 2. each face to the closest mean face, a few times
+  for(int pass = 0; pass < 3; pass++)
   {
-    _face_t *f = &g_array_index(faces, _face_t, i);
-    if(f->person) continue;
-    _person_t *best = NULL;
-    float best_sim = T_ASSIGN;
-    g_hash_table_iter_init(&it, people);
-    while(g_hash_table_iter_next(&it, &key, &value))
+    int moved = 0;
+    for(guint t = 0; t < todo->len; t++)
     {
-      _person_t *p = value;
-      if(!p->count || g_hash_table_contains(p->imgs, GINT_TO_POINTER(f->img))) continue;
-      const gint64 k = _pair(f->id, p->id);
-      if(g_hash_table_contains(nots, &k)) continue;
-      const float sim = _dot(f->e, p->c);
-      if(sim > best_sim)
+      _face_t *f = &g_array_index(faces, _face_t, g_array_index(todo, guint, t));
+      _group_t *own = g_ptr_array_index(groups, f->group);
+      const float own_sim = _dot(f->e, own->c);
+      float sim;
+      const int best = _closest(groups, f, nots, &sim);
+      if(best >= 0 && best != f->group && sim >= T_JOIN && sim > own_sim + 0.03f)
       {
-        best_sim = sim;
-        best = p;
+        _group_add(own, f, -1);
+        f->group = best;
+        _group_add(g_ptr_array_index(groups, best), f, 1);
+        moved++;
       }
     }
-    if(best)
-    {
-      SET_PERSON(f, best->id);
-      g_hash_table_add(best->imgs, GINT_TO_POINTER(f->img));
-    }
+    if(!moved) break;
   }
 
-  // 2. the faces of no one grouped among themselves, a person once in a photo
-  GArray *rest = g_array_new(FALSE, FALSE, sizeof(guint));
-  for(guint i = 0; i < faces->len; i++)
-    if(!g_array_index(faces, _face_t, i).person) g_array_append_val(rest, i);
-  const int n = rest->len;
-  if(n > 1)
-  {
-    int *parent = g_new(int, n);
-    for(int i = 0; i < n; i++) parent[i] = i;
-    for(int i = 0; i < n; i++)
-    {
-      _face_t *a = &g_array_index(faces, _face_t, g_array_index(rest, guint, i));
-      for(int j = i + 1; j < n; j++)
-      {
-        _face_t *b = &g_array_index(faces, _face_t, g_array_index(rest, guint, j));
-        if(a->img == b->img || _dot(a->e, b->e) < T_GROUP) continue;
-        const int ra = _find(parent, i), rb = _find(parent, j);
-        if(ra != rb) parent[rb] = ra;
-      }
-    }
-    // the groups of two photos or more become people
-    GHashTable *groups = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)g_list_free);
-    for(int i = 0; i < n; i++)
-    {
-      const int r = _find(parent, i);
-      GList *members = g_hash_table_lookup(groups, GINT_TO_POINTER(r));
-      g_hash_table_steal(groups, GINT_TO_POINTER(r));
-      g_hash_table_insert(groups, GINT_TO_POINTER(r), g_list_prepend(members, GINT_TO_POINTER(i)));
-    }
-    sqlite3_stmt *ins;
-    DT_DEBUG_SQLITE3_PREPARE_V2(db, "INSERT INTO main.ls_people (name, hidden, time) VALUES (NULL, 0, ?1)", -1,
-                                &ins, NULL);
-    g_hash_table_iter_init(&it, groups);
-    while(g_hash_table_iter_next(&it, &key, &value))
-    {
-      GHashTable *imgs = g_hash_table_new(g_direct_hash, g_direct_equal);
-      for(GList *l = value; l; l = g_list_next(l))
-        g_hash_table_add(imgs, GINT_TO_POINTER(g_array_index(faces, _face_t,
-                                                            g_array_index(rest, guint, GPOINTER_TO_INT(l->data))).img));
-      if(g_hash_table_size(imgs) >= 2)
-      {
-        DT_DEBUG_SQLITE3_BIND_INT64(ins, 1, g_get_real_time() / G_USEC_PER_SEC);
-        sqlite3_step(ins);
-        sqlite3_reset(ins);
-        const int pid = (int)sqlite3_last_insert_rowid(db);
-        GHashTable *seen = g_hash_table_new(g_direct_hash, g_direct_equal);
-        for(GList *l = value; l; l = g_list_next(l))
-        {
-          _face_t *f = &g_array_index(faces, _face_t, g_array_index(rest, guint, GPOINTER_TO_INT(l->data)));
-          if(g_hash_table_contains(seen, GINT_TO_POINTER(f->img))) continue;   // once in a photo
-          g_hash_table_add(seen, GINT_TO_POINTER(f->img));
-          SET_PERSON(f, pid);
-        }
-        g_hash_table_destroy(seen);
-      }
-      g_hash_table_destroy(imgs);
-    }
-    sqlite3_finalize(ins);
-    g_hash_table_destroy(groups);
-    g_free(parent);
-  }
-  g_array_free(rest, TRUE);
-
-  // 3. an unnamed person too close to another one is the same: merged, unless
+  // 3. an unnamed group too close to another one is the same person, unless
   // they are in a photo together
-  g_hash_table_remove_all(people);
-  DT_DEBUG_SQLITE3_PREPARE_V2(db, "SELECT id, name IS NOT NULL FROM main.ls_people", -1, &stmt, NULL);
-  while(sqlite3_step(stmt) == SQLITE_ROW)
+  for(guint a = 0; a < groups->len; a++)
   {
-    _person_t *p = g_malloc0(sizeof(_person_t));
-    p->id = sqlite3_column_int(stmt, 0);
-    p->named = sqlite3_column_int(stmt, 1);
-    p->imgs = g_hash_table_new(g_direct_hash, g_direct_equal);
-    g_hash_table_insert(people, GINT_TO_POINTER(p->id), p);
-  }
-  sqlite3_finalize(stmt);
-  for(guint i = 0; i < faces->len; i++)
-  {
-    _face_t *f = &g_array_index(faces, _face_t, i);
-    _person_t *p = f->person ? g_hash_table_lookup(people, GINT_TO_POINTER(f->person)) : NULL;
-    if(!p) continue;
-    for(int k = 0; k < EMB; k++) p->c[k] += f->e[k];
-    p->count++;
-    g_hash_table_add(p->imgs, GINT_TO_POINTER(f->img));
-  }
-  GList *list = g_hash_table_get_values(people);
-  for(GList *l = list; l; l = g_list_next(l)) _normalize(((_person_t *)l->data)->c);
-  for(GList *a = list; a; a = g_list_next(a))
-  {
-    _person_t *pa = a->data;
-    if(pa->named || !pa->count) continue;
-    _person_t *into = NULL;
+    _group_t *ga = g_ptr_array_index(groups, a);
+    if(ga->named || !ga->count) continue;
+    int into = -1;
     float best = T_MERGE;
-    for(GList *b = list; b; b = g_list_next(b))
+    for(guint b = 0; b < groups->len; b++)
     {
-      _person_t *pb = b->data;
-      if(pb == pa || !pb->count) continue;
+      _group_t *gb = g_ptr_array_index(groups, b);
+      if(b == a || !gb->count) continue;
       gboolean together = FALSE;
-      GHashTableIter ii;
+      GHashTableIter it;
       gpointer img;
-      g_hash_table_iter_init(&ii, pa->imgs);
-      while(!together && g_hash_table_iter_next(&ii, &img, NULL))
-        together = g_hash_table_contains(pb->imgs, img);
+      g_hash_table_iter_init(&it, ga->imgs);
+      while(!together && g_hash_table_iter_next(&it, &img, NULL))
+        together = g_hash_table_contains(gb->imgs, img);
       if(together) continue;
-      const float sim = _dot(pa->c, pb->c);
-      if(sim > best)
+      const float s = _dot(ga->c, gb->c);
+      if(s > best)
       {
-        best = sim;
-        into = pb;
+        best = s;
+        into = b;
       }
     }
-    if(!into) continue;
+    if(into < 0) continue;
+    _group_t *gi = g_ptr_array_index(groups, into);
     for(guint i = 0; i < faces->len; i++)
     {
       _face_t *f = &g_array_index(faces, _face_t, i);
-      if(f->person != pa->id) continue;
-      const gint64 k = _pair(f->id, into->id);
-      if(g_hash_table_contains(nots, &k)) continue;
-      SET_PERSON(f, into->id);
-      g_hash_table_add(into->imgs, GINT_TO_POINTER(f->img));
+      if(f->group != (int)a) continue;
+      if(gi->person)
+      {
+        const gint64 key = _pair(f->id, gi->person);
+        if(g_hash_table_contains(nots, &key)) continue;
+      }
+      _group_add(ga, f, -1);
+      f->group = into;
+      _group_add(gi, f, 1);
     }
-    g_hash_table_add(changed, GINT_TO_POINTER(pa->id));
-    // the mean face of the merged person, for the next ones
-    for(int k = 0; k < EMB; k++) into->c[k] = into->c[k] * into->count + pa->c[k] * pa->count;
-    into->count += pa->count;
-    _normalize(into->c);
-    pa->count = 0;
   }
-  g_list_free(list);
-#undef SET_PERSON
-  sqlite3_finalize(upd);
 
+  // the groups of two photos or more are people; a face alone is no one
+  sqlite3_stmt *ins, *upd;
+  DT_DEBUG_SQLITE3_PREPARE_V2(db, "INSERT INTO main.ls_people (name, hidden, time) VALUES (NULL, 0, ?1)", -1, &ins,
+                              NULL);
+  DT_DEBUG_SQLITE3_PREPARE_V2(db, "UPDATE main.ls_faces SET person = ?2 WHERE id = ?1", -1, &upd, NULL);
+  dt_database_start_transaction(darktable.db);
+  for(guint k = 0; k < groups->len; k++)
+  {
+    _group_t *g = g_ptr_array_index(groups, k);
+    if(!g->person && g_hash_table_size(g->imgs) >= 2)
+    {
+      DT_DEBUG_SQLITE3_BIND_INT64(ins, 1, g_get_real_time() / G_USEC_PER_SEC);
+      sqlite3_step(ins);
+      sqlite3_reset(ins);
+      g->person = (int)sqlite3_last_insert_rowid(db);
+    }
+  }
+  for(guint i = 0; i < faces->len; i++)
+  {
+    _face_t *f = &g_array_index(faces, _face_t, i);
+    const int person = f->group >= 0 ? ((_group_t *)g_ptr_array_index(groups, f->group))->person : 0;
+    if(person == f->person) continue;
+    DT_DEBUG_SQLITE3_BIND_INT64(upd, 1, f->id);
+    if(person)
+    {
+      DT_DEBUG_SQLITE3_BIND_INT(upd, 2, person);
+    }
+    else
+      sqlite3_bind_null(upd, 2);
+    sqlite3_step(upd);
+    sqlite3_reset(upd);
+    if(person) g_hash_table_add(changed, GINT_TO_POINTER(person));
+    if(f->person) g_hash_table_add(changed, GINT_TO_POINTER(f->person));
+  }
+  sqlite3_finalize(ins);
+  sqlite3_finalize(upd);
   // the people with no face left
   _exec("DELETE FROM main.ls_people WHERE id NOT IN (SELECT DISTINCT person FROM main.ls_faces"
         " WHERE person IS NOT NULL)");
   dt_database_release_transaction(darktable.db);
 
-  g_hash_table_destroy(people);
-  g_hash_table_destroy(nots);
+  g_array_free(todo, TRUE);
   g_array_free(faces, TRUE);
+  g_ptr_array_free(groups, TRUE);
+  g_hash_table_destroy(of_person);
+  g_hash_table_destroy(nots);
   return changed;
 }
 
@@ -545,6 +540,54 @@ static void _merge(const int from, const int into)
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, into);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+}
+
+// ---------------------------------------------------------------------------
+// the photo the faces are looked for in, without the pixelpipe: right after
+// an import the thumbnails of the library are made on the GPU, and a second
+// pipe at the same time crashes some drivers (and is slow). The file itself
+// for the formats the helper reads, the jpeg in a raw file turned as the
+// photo, else the thumbnail of the library.
+
+#define FACE_SIDE 2400
+
+gchar *dt_people_face_file(const dt_imgid_t id, const char *dir)
+{
+  char filename[PATH_MAX] = { 0 };
+  gboolean from_cache = FALSE;
+  dt_image_full_path(id, filename, sizeof(filename), &from_cache);
+  const char *ext = strrchr(filename, '.');
+  static const char *direct[] = { ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp", NULL };
+  for(int k = 0; ext && direct[k]; k++)
+    if(!g_ascii_strcasecmp(ext, direct[k]) && g_file_test(filename, G_FILE_TEST_IS_REGULAR))
+      return g_strdup(filename);
+
+  gchar *name = g_strdup_printf("%d.jpg", id);
+  gchar *path = g_build_filename(dir, name, NULL);
+  g_free(name);
+  uint8_t *thumb = NULL;
+  int32_t w = 0, h = 0;
+  dt_colorspaces_color_profile_type_t cs;
+  gboolean ok = FALSE;
+  if(!dt_imageio_large_thumbnail(filename, &thumb, &w, &h, &cs) && thumb && w > 0 && h > 0)
+  {
+    uint8_t *out = dt_alloc_align_uint8((size_t)FACE_SIDE * FACE_SIDE * 4);
+    uint32_t ow = 0, oh = 0;
+    if(out)
+    {
+      dt_iop_flip_and_zoom_8(thumb, w, h, out, FACE_SIDE, FACE_SIDE, dt_image_get_orientation(id), &ow, &oh);
+      ok = ow > 0 && oh > 0 && dt_imageio_jpeg_write(path, out, ow, oh, 92, NULL, 0) == 0;
+      dt_free_align(out);
+    }
+  }
+  dt_free_align(thumb);
+  if(!ok) ok = dt_lsai_write_preview(id, 1600, path);
+  if(!ok)
+  {
+    g_free(path);
+    return NULL;
+  }
+  return path;
 }
 
 // ---------------------------------------------------------------------------

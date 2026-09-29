@@ -32,6 +32,9 @@
 void dt_people_init(void);
 // the name of a person, NULL unnamed (to free)
 gchar *dt_people_name(const int person);
+// the photo to look for faces in (the file itself, the jpeg of a raw file,
+// else the thumbnail of the library written into dir), NULL none
+gchar *dt_people_face_file(const dt_imgid_t id, const char *dir);
 // the faces of a search into the library (the answer of the helper's "faces")
 void dt_people_store(JsonObject *res);
 // the faces of no one join the people or become new ones: the people changed

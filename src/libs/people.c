@@ -69,7 +69,6 @@ DT_MODULE(1)
 #define CONF "plugins/lighttable/people/"
 #define PERSON_TAG "darktable|tonelark|person|"
 #define CHUNK 60              // photos per run of the helper
-#define PREVIEW 1600          // the photos the faces are looked for in
 #define TILE 48
 #define GRID_ROWS 3           // rows of faces seen at once, the others scroll
 #define MAX_TILES 300
@@ -81,6 +80,7 @@ typedef struct dt_lib_people_t
   gchar *saved;               // the collection before a person was shown
   gchar *ours;                // the collection with the person rule, as set here
   gboolean busy;
+  gboolean setting;           // the collection being set here: its signal is ours
   GList *imported;            // new imports to search
   guint import_timer, refresh_idle;
   gchar *sig;                 // what the grid shows
@@ -201,16 +201,14 @@ static int32_t _scan_run(dt_job_t *job)
     {
       const dt_imgid_t id = GPOINTER_TO_INT(l->data);
       dt_control_job_set_progress_message(job, _("people: preparing %d/%d"), s->searched + c + 1, n);
-      gchar *name = g_strdup_printf("%d.jpg", id);
-      gchar *path = g_build_filename(dir, name, NULL);
-      if(dt_lsai_write_preview(id, PREVIEW, path))
+      gchar *path = dt_people_face_file(id, dir);
+      if(path)
       {
         JsonObject *o = json_object_new();
         json_object_set_int_member(o, "id", id);
         json_object_set_string_member(o, "path", path);
         json_array_add_object_element(arr, o);
       }
-      g_free(name);
       g_free(path);
     }
     const int chunk = json_array_get_length(arr);
@@ -314,7 +312,10 @@ static void _find_clicked(GtkButton *b, dt_lib_module_t *self)
 static void _set_collection(dt_lib_module_t *self, const char *serialized)
 {
   dt_lib_people_t *d = self->data;
+  // the collection changed signal comes during the deserialize, before ours is known
+  d->setting = TRUE;
   dt_collection_deserialize(serialized, FALSE);
+  d->setting = FALSE;
   char buf[4096];
   dt_collection_serialize(buf, sizeof(buf), FALSE);
   g_free(d->ours);
@@ -347,7 +348,9 @@ static void _show(dt_lib_module_t *self, const int person)
   }
   else
   {
+    d->setting = TRUE;
     dt_collection_deserialize(d->saved, FALSE);
+    d->setting = FALSE;
     g_free(d->saved);
     g_free(d->ours);
     d->saved = d->ours = NULL;
@@ -572,7 +575,8 @@ static void _refresh(dt_lib_module_t *self)
       gsize len = 0;
       const void *blob = g_bytes_get_data(t->thumb, &len);
       GtkWidget *img = _face_image(blob, len);
-      GtkWidget *label = gtk_label_new(t->name ? t->name : _("unnamed"));
+      // no room for "unnamed" under a face: its tooltip says it
+      GtkWidget *label = gtk_label_new(t->name ? t->name : "?");
       gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
       gtk_label_set_max_width_chars(GTK_LABEL(label), 1);
       gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
@@ -651,7 +655,7 @@ static void _collection_changed(gpointer instance, dt_collection_change_t query_
 {
   dt_lib_people_t *d = self->data;
   // another collection chosen while a person was shown: not shown anymore
-  if(d->shown && d->ours)
+  if(d->shown && d->ours && !d->setting)
   {
     char buf[4096];
     dt_collection_serialize(buf, sizeof(buf), FALSE);
@@ -780,7 +784,9 @@ void gui_init(dt_lib_module_t *self)
                                      _("hide this person from the panel (strangers, faces in the background)"), 0, 0);
   d->actions = dt_gui_hbox(dt_gui_expand(d->name_btn), dt_gui_expand(d->not_btn), dt_gui_expand(d->hide_btn));
 
-  self->widget = dt_gui_vbox(d->find, d->auto_new, d->status, d->head, d->all, d->actions, d->grid_wrap);
+  // the faces keep their place when a person is shown: the buttons of the
+  // person under them
+  self->widget = dt_gui_vbox(d->find, d->auto_new, d->status, d->head, d->grid_wrap, d->all, d->actions);
   gtk_widget_show_all(self->widget);
   gtk_widget_set_no_show_all(d->all, TRUE);
   gtk_widget_set_no_show_all(d->actions, TRUE);
