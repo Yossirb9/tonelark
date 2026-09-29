@@ -1559,7 +1559,7 @@
   <dtconfig prefs="lighttable" section="thumbs">
     <name>plugins/lighttable/thumbnail_tooltip_pattern</name>
     <type>longstring</type>
-    <default>&lt;b&gt;$(FILE_NAME).$(FILE_EXTENSION)&lt;/b&gt;$(NL)$(EXIF.DATE.REGIONAL) $(EXIF.TIME.REGIONAL) $(GPS.LOCATION.ICON) $(EXIF.FLASH.ICON)$(NL)&lt;b&gt;$(EXIF.EXPOSURE)&lt;/b&gt; • &lt;b&gt;f/$(EXIF.APERTURE)&lt;/b&gt; • &lt;b&gt;$(EXIF.FOCAL.LENGTH)&lt;/b&gt;mm • ISO &lt;b&gt;$(EXIF.ISO)&lt;/b&gt;</default>
+    <default>&lt;b&gt;$(FILE_NAME).$(FILE_EXTENSION)&lt;/b&gt;$(NL)$(EXIF.DATE.REGIONAL) $(EXIF.TIME.REGIONAL) $(GPS.LOCATION.ICON) $(EXIF.FLASH.ICON)$(NL)&lt;b&gt;$(EXIF.EXPOSURE)&lt;/b&gt; • &lt;b&gt;f/$(EXIF.APERTURE)&lt;/b&gt; • &lt;b&gt;$(EXIF.FOCAL.LENGTH)&lt;/b&gt;mm • ISO &lt;b&gt;$(EXIF.ISO)&lt;/b&gt;$(Xmp.acdsee.notes+$(NL)$(NL)$(Xmp.acdsee.notes))</default>
     <shortdescription>pattern for the thumbnail tooltip (empty to disable)</shortdescription>
     <longdescription>see manual to know all the tags you can use.</longdescription>
   </dtconfig>

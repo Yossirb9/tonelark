@@ -553,10 +553,25 @@ def make_sheet(paths, out, cols=4, cell=520, labels=None):
     return out
 
 
-RATE_PROMPT = """The image {sheet} is a contact sheet of {n} photos from one shoot, each marked with a yellow number (1 to {n}).
-Act as a professional photo editor culling the shoot. For every number, rate the photo from 1 to 10: technical quality (focus on the subject, exposure, motion blur, closed eyes, awkward expressions) and appeal (moment, composition, light).
-{bursts}{criteria}Answer with JSON only, no other text:
-{{"photos":[{{"n":1,"score":7.5,"keep":true,{match}"reason":"max 12 words"}}]}}"""
+RATE_PROMPT = """The image {sheet} is a contact sheet of {n} photos, each marked with a yellow number (1 to {n}).
+{task}
+Most of them are raw files as the camera took them, before any editing: rate what each photo can become after a normal edit, not how it looks now. Exposure, dark faces, white balance, colors, contrast, flat light, noise and the crop are easy to fix in the editor: they do not lower the score (name them in the reason as what to fix). The score goes down only for what editing cannot fix: focus and motion blur, closed eyes, the expression and the moment, a cut-off or hidden subject, highlights blown beyond recovery.
+The scores: 9-10 outstanding, 7-8 good, 5-6 usable with clear flaws, 3-4 weak, 1-2 unusable (out of focus, eyes closed).
+Compare the photos with each other and use the whole scale: do not give most photos about the same score, the best photos get clearly higher scores than the others.
+{bursts}"keep" is true only for the photos worth keeping and editing{keep_for}.
+"reason" explains the score in {language}, in one or two short sentences (at most 30 words): what is good, what lowered the score{reason_for}, and what to fix in the edit if anything. The user reads it next to that photo alone: write about that photo, without mentioning the other photos or their numbers.
+Answer with JSON only, no other text:
+{{"photos":[{{"n":1,"score":7.5,"keep":true,{match}"reason":"..."}}]}}"""
+
+RATE_TASK = ("Act as a professional photo editor culling the shoot. Rate every photo from 1 to 10 for its "
+             "potential: the subject in focus, no motion blur, open eyes and a good expression, the moment, "
+             "the composition and the light.")
+
+RATE_TASK_FOR = ('The user is looking for: "{criteria}". Act as a professional photo editor choosing the photos '
+                 'for this request. Rate every photo from 1 to 10 first by how well it answers the request, then '
+                 'by its potential (focus, expression, moment, composition, light). A photo that does not answer '
+                 'the request scores 1 to 3, however good it is otherwise; a photo that answers it only in part '
+                 'scores at most 6. "match" is true when the photo answers the request.')
 
 
 def cmd_rate(req):
@@ -564,6 +579,7 @@ def cmd_rate(req):
     provider = req.get('provider', 'claude')
     per = int(req.get('per_sheet', 12))
     criteria = (req.get('criteria') or '').strip()
+    language = (req.get('language') or 'English').strip()
     work = tempfile.mkdtemp(prefix='lsai_rate_')
     bursts = req.get('bursts') or []
     burst_of = {i: b for b, ids in enumerate(bursts) for i in ids if len(ids) > 1}
@@ -579,19 +595,21 @@ def cmd_rate(req):
                 groups.setdefault(burst_of[im['id']], []).append(k + 1)
         btext = ''.join('Photos %s are a burst of the same moment: give the best of them the highest score.\n'
                         % ', '.join(map(str, g)) for g in groups.values() if len(g) > 1)
-        ctext = ('Also say if each photo matches this request: "%s" (field "match": true or false).\n'
-                 % criteria) if criteria else ''
-        prompt = RATE_PROMPT.format(sheet=name, n=len(chunk), bursts=btext, criteria=ctext,
-                                    match='"match":true,' if criteria else '')
+        prompt = RATE_PROMPT.format(
+            sheet=name, n=len(chunk), bursts=btext, language=language,
+            task=RATE_TASK_FOR.format(criteria=criteria.replace('"', "'")) if criteria else RATE_TASK,
+            keep_for=' for this request' if criteria else '',
+            reason_for=', and whether it answers the request' if criteria else '',
+            match='"match":true,' if criteria else '')
         answer = ask_model(provider, prompt, [os.path.join(work, name)], work,
                            req.get('model', ''), int(req.get('timeout', 600)))
         out = []
         for r in extract_json(answer).get('photos', []):
             n = int(r.get('n', 0))
             if 1 <= n <= len(chunk):
-                out.append(dict(id=chunk[n - 1]['id'], score=float(r.get('score', 0)),
+                out.append(dict(id=chunk[n - 1]['id'], score=max(1.0, min(10.0, float(r.get('score', 0)))),
                                 keep=bool(r.get('keep', False)), match=r.get('match'),
-                                reason=str(r.get('reason', ''))[:200]))
+                                reason=' '.join(str(r.get('reason', '')).split())[:300]))
         return out
 
     results, errors, done = [], [], 0

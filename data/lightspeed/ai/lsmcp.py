@@ -149,7 +149,7 @@ TOOLS = [
     dict(name='export_photos', description='Export photos as JPEG files with their edits.',
          inputSchema={'type': 'object', 'properties': {'ids': IDS, 'folder': {'type': 'string', 'description': 'absolute folder path'}, 'max_size': {'type': 'integer', 'description': 'longest side in pixels, 0 = full size', 'default': 0}, 'quality': {'type': 'integer', 'default': 92}}, 'required': ['ids', 'folder']}),
     dict(name='run_ai_tool', description='Run one of the AI tools of Tonelark on photos (they work on contact sheets, cheaply, and the results appear in Tonelark: stars, flags, notes, edits, keywords). find_best_shots works on this computer without AI. The photos must be in the collection Tonelark shows (list_photos scope collection). Check the results later with list_photos.',
-         inputSchema={'type': 'object', 'properties': {'tool': {'type': 'string', 'enum': sorted(AI_TOOLS)}, 'ids': IDS, 'instruction': {'type': 'string', 'description': 'for auto_edit: the look to make'}}, 'required': ['tool', 'ids']}),
+         inputSchema={'type': 'object', 'properties': {'tool': {'type': 'string', 'enum': sorted(AI_TOOLS)}, 'ids': IDS, 'instruction': {'type': 'string', 'description': 'for auto_edit: the look to make; for rate_with_ai: what to look for (e.g. "the best portrait"): the photos are rated by how well they answer it, with the reason of each score in its notes'}}, 'required': ['tool', 'ids']}),
 ]
 
 # what each tool does, for the approval prompts of the chat tools
@@ -300,6 +300,8 @@ def run_tool(name, a):
         args = dict(action=tool, ids=ids or [])
         if a.get('instruction'):
             args['text'] = a['instruction']
+        elif a.get('tool') == 'rate_with_ai':
+            args['text'] = ''      # not the request left in the panel
         return _text(call('action', args, 30))
     raise TonelarkError('unknown tool ' + name)
 

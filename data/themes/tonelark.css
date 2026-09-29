@@ -477,3 +477,34 @@ tooltip label,
 {
   color: #eeeeee;
 }
+
+/* AI culling: the ratings list, the reason of each score under its photo */
+#aicull-ratings-head
+{
+  color: @ls_text_dim;
+  font-size: 0.9em;
+  padding: 0.1em 0 0.3em;
+}
+
+#aicull-rating
+{
+  padding: 0.35em 0.3em;
+  border-bottom: 1px solid alpha(@ls_text_dim, 0.18);
+}
+
+#aicull-rating:hover
+{
+  background-color: alpha(#ffffff, 0.06);
+}
+
+#aicull-rating-title
+{
+  color: @ls_text_hi;
+  font-size: 0.95em;
+}
+
+#aicull-rating-reason
+{
+  color: @ls_text;
+  font-size: 0.86em;
+}

@@ -591,9 +591,15 @@ static JsonObject *_cmd_action(JsonObject *args, gchar **error)
     dt_selection_clear(darktable.selection);
     if(ids) dt_selection_select_list(darktable.selection, ids);
     g_list_free(ids);
+    // the tools act on the photo under the mouse before the selection: not
+    // on the one the user happens to point at
+    dt_control_set_mouse_over_id(NO_IMGID);
   }
+  // the look of Auto Edit, or what Rate with AI looks for
   const char *text = _str(args, "text");
-  if(text) dt_conf_set_string("plugins/lightspeed/ai/instruction", text);
+  if(text)
+    dt_conf_set_string(g_str_has_prefix(path, "lib/aicull/") ? "plugins/lighttable/aicull/criteria"
+                                                              : "plugins/lightspeed/ai/instruction", text);
   dt_action_process(path, 0, NULL, NULL, 1.0f);
   JsonObject *o = json_object_new();
   json_object_set_string_member(o, "started", path);
