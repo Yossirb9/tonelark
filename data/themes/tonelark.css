@@ -210,6 +210,65 @@ box *,
   border-bottom: 1px solid #3b3b3b;
 }
 
+/* ------------------------------ Lightroom panels: tabs and menus (lrpanels.c) */
+
+#modules-tabs .dt_lrp_tab
+{
+  background-color: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: @ls_text_dim;
+  font-family: "Segoe UI Semibold", "Segoe UI", sans-serif;
+  font-size: 1.0em;
+  padding: 0.25em 0.6em;
+  min-height: 1.8em;
+}
+
+#modules-tabs .dt_lrp_tab:hover
+{
+  color: @ls_text_hi;
+}
+
+#modules-tabs .dt_lrp_tab:checked
+{
+  color: @ls_text_hi;
+  border-bottom-color: @ls_accent;
+}
+
+.dt_lrp_menu #module-header
+{
+  background-color: #262626;
+  border-top: 1px solid #3a3a3a;
+  border-bottom: 1px solid @ls_line;
+  padding: 0.45em 0.5em;
+}
+
+.dt_lrp_menu:hover #module-header
+{
+  background-color: #2e2e2e;
+}
+
+.dt_lrp_menu #lib-panel-label
+{
+  color: #dedede;
+  font-size: 1.05em;
+}
+
+#lrp-menu-mark
+{
+  color: @ls_accent;
+  font-size: 0.75em;
+  padding-right: 0.3em;
+}
+
+/* the modules in a menu are indented under its header */
+.dt_lrp_menu_item
+{
+  margin-left: 0.9em;
+  border-left: 2px solid #2e2e2e;
+}
+
 /* ----------------------------------------------- Lightroom basic panel */
 
 #basicpanel

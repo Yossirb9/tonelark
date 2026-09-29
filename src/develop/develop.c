@@ -43,6 +43,7 @@
 #include "develop/masks.h"
 #include "libs/modulegroups.h"
 #include "gui/gtk.h"
+#include "gui/lrpanels.h"
 #include "gui/presets.h"
 #include "imageio/imageio_common.h"
 
@@ -3913,6 +3914,13 @@ static gint _lightroom_panel_cmp(gconstpointer a, gconstpointer b)
 // set the module list order
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
 {
+  // Tonelark layout: the Lightroom panels and the menus of all tools
+  if(dt_lrp_enabled())
+  {
+    dt_lrp_layout();
+    return;
+  }
+
   GtkBox *box = dt_ui_get_container(darktable.gui->ui,
                                     DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
   int pos_module = 0;

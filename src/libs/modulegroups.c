@@ -29,6 +29,7 @@
 #include "dtgtk/icon.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
+#include "gui/lrpanels.h"
 #include "gui/presets.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
@@ -271,6 +272,9 @@ static gboolean _lib_modulegroups_test_internal(dt_lib_module_t *self, uint32_t 
 
 static gboolean _lib_modulegroups_test(dt_lib_module_t *self, uint32_t group, dt_iop_module_t *module)
 {
+  // Tonelark layout: the tabs of the Lightroom panels
+  if(dt_lrp_enabled() && group >= 1 && group <= DT_LRP_TABS)
+    return dt_lrp_in_tab(group - 1, module);
   return _lib_modulegroups_test_internal(self, group, module);
 }
 
@@ -889,8 +893,12 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
         }
         else
         {
+           // the Lightroom name and the darktable name of the module
            const int is_match = (g_strstr_len(g_utf8_casefold(dt_iop_get_localized_name(module->op), -1), -1,
                                               g_utf8_casefold(text_entered, -1))
+                                 != NULL) ||
+                                 (g_strstr_len(g_utf8_casefold(module->name(), -1), -1,
+                                               g_utf8_casefold(text_entered, -1))
                                  != NULL) ||
                                  (g_strstr_len(g_utf8_casefold(dt_iop_get_localized_aliases(module->op), -1), -1,
                                                g_utf8_casefold(text_entered, -1))
@@ -963,6 +971,17 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
       }
 
   }
+
+  // Tonelark layout: the Lightroom panels and the menus of all tools, or the
+  // modules in panel order when searching or showing the active modules
+  if(dt_lrp_enabled())
+  {
+    const gboolean tabbed = !(text_entered && text_entered[0] != '\0') && !d->force_show_module
+                            && d->current >= 1 && d->current <= DT_LRP_TABS;
+    dt_lrp_update(tabbed ? d->current - 1 : -1);
+  }
+  else
+    dt_lrp_cleanup();
 
   // we show eventual basic panel but only if no text in the search box
   if(d->current == DT_MODULEGROUP_BASICS && !(text_entered && text_entered[0] != '\0')) _basics_show(self);
@@ -1070,6 +1089,8 @@ static void _lib_modulegroups_switch_group(dt_lib_module_t *self, dt_iop_module_
     if(_lib_modulegroups_test(self, k, module))
     {
       d->force_show_module = NULL;
+      // Tonelark layout: open the menu of the module too
+      if(dt_lrp_enabled()) dt_lrp_reveal(k - 1, module);
       _lib_modulegroups_set(self, k);
       return;
     }
@@ -1532,6 +1553,12 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
 // add module
 #define AM(n)    dt_util_str_cat(&tx, "|%s", n)
 
+static void _preset_add_module(const char *op, gpointer data)
+{
+  gchar **tx = data;
+  dt_util_str_cat(tx, "|%s", op);
+}
+
 void init_presets(dt_lib_module_t *self)
 {
   self->pref_based_presets = TRUE;
@@ -1797,107 +1824,17 @@ void init_presets(dt_lib_module_t *self)
   dt_lib_presets_add(_("workflow: scene-referred"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
 
-  // Tonelark: the Lightroom develop panels first (tone curve, HSL,
-  // color grading, detail, lens corrections, transform, effects,
-  // calibration, healing), then every darktable tool grouped by task.
-  // The basic panel (sliders) sits above the modules, so no quick access.
+  // Tonelark: a "develop" tab with the Lightroom develop panels (tone
+  // curve, HSL / color, color grading, detail, lens corrections,
+  // transform, effects, calibration, healing) and an "all tools" tab with
+  // every darktable module in menus by task (see gui/lrpanels.c). The
+  // basic panel (sliders) sits above the modules, so no quick access.
   SNQA();
-  SMG(C_("modulegroup", "develop"), "basic");
-  AM("rgbcurve");
-  AM("colorequal");
-  AM("colorbalancergb");
-  AM("sharpen");
-  AM("denoiseprofile");
-  AM("lens");
-  AM("cacorrectrgb");
-  AM("ashift");
-  AM("crop");
-  AM("vignette");
-  AM("grain");
-  AM("channelmixerrgb");
-  AM("retouch");
-
-  SMG(C_("modulegroup", "tone"), "tone");
-  AM("exposure");
-  AM("toneequal");
-  AM("sigmoid");
-  AM("filmicrgb");
-  AM("agx");
-  AM("rgbcurve");
-  AM("rgblevels");
-  AM("tonecurve");
-  AM("shadhi");
-  AM("bilat");
-  AM("atrous");
-  AM("basecurve");
-  AM("highlights");
-  AM("negadoctor");
-
-  SMG(C_("modulegroup", "color"), "color");
-  AM("channelmixerrgb");
-  AM("colorbalancergb");
-  AM("colorequal");
-  AM("colorzones");
-  AM("primaries");
-  AM("temperature");
-  AM("velvia");
-  AM("colorcorrection");
-  AM("colorcontrast");
-  AM("colorharmonizer");
-  AM("colorize");
-  AM("monochrome");
-  AM("splittoning");
-  AM("lut3d");
-  AM("colorchecker");
-  AM("colormapping");
-  AM("colorbalance");
-
-  SMG(C_("modulegroup", "correct"), "correct");
-  AM("lens");
-  AM("ashift");
-  AM("crop");
-  AM("flip");
-  AM("liquify");
-  AM("retouch");
-  AM("denoiseprofile");
-  AM("nlmeans");
-  AM("rawdenoise");
-  AM("hotpixels");
-  AM("cacorrect");
-  AM("cacorrectrgb");
-  AM("sharpen");
-  AM("diffuse");
-  AM("hazeremoval");
-  AM("bilateral");
-  AM("colorreconstruction");
-  AM("enlargecanvas");
-
-  SMG(C_("modulegroup", "effects"), "effect");
-  AM("vignette");
-  AM("grain");
-  AM("bloom");
-  AM("soften");
-  AM("blurs");
-  AM("lowlight");
-  AM("lowpass");
-  AM("highpass");
-  AM("graduatednd");
-  AM("borders");
-  AM("watermark");
-  AM("overlay");
-  AM("censorize");
-
-  SMG(C_("modulegroup", "technical"), "technical");
-  AM("rawprepare");
-  AM("demosaic");
-  AM("temperature");
-  AM("highlights");
-  AM("colorin");
-  AM("colorout");
-  AM("dither");
-  AM("profile_gamma");
-  AM("rasterfile");
-  AM("scalepixels");
+  for(int tab = 0; tab < DT_LRP_TABS; tab++)
+  {
+    SMG(dt_lrp_tab_name(tab), tab == 0 ? "basic" : "technical");
+    dt_lrp_tab_ops(tab, _preset_add_module, &tx);
+  }
 
   dt_lib_presets_add(_("Tonelark"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
@@ -3147,6 +3084,13 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), d->deprecated, TRUE, TRUE, 0);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->active_btn), TRUE);
+  // Tonelark layout (1.3.1): start once on the develop panels, the tab kept
+  // before was a group of the older layout
+  if(dt_lrp_enabled() && !dt_conf_key_exists("lightspeed/panels/layout"))
+  {
+    dt_conf_set_int("plugins/darkroom/groups", 1);
+    dt_conf_set_int("lightspeed/panels/layout", 1);
+  }
   d->current = dt_conf_get_int("plugins/darkroom/groups");
   if(d->current == DT_MODULEGROUP_NONE) _lib_modulegroups_update_iop_visibility(self);
   gtk_widget_show_all(self->widget);
@@ -3242,10 +3186,21 @@ static void _buttons_update(dt_lib_module_t *self)
   }
 
   // then we repopulate the box with new buttons
+  // Tonelark layout: tabs with names ("Develop", "All tools") instead of icons
+  const gboolean lr_tabs = dt_lrp_enabled();
   for(l = d->groups; l; l = g_list_next(l))
   {
     dt_lib_modulegroups_group_t *gr = l->data;
-    GtkWidget *bt = dtgtk_togglebutton_new(_buttons_get_icon_fct(gr->icon), 0, NULL);
+    GtkWidget *bt = NULL;
+    if(lr_tabs)
+    {
+      gchar *title = dt_ui_panel_title(gr->name);
+      bt = gtk_toggle_button_new_with_label(title);
+      g_free(title);
+      dt_gui_add_class(bt, "dt_lrp_tab");
+    }
+    else
+      bt = dtgtk_togglebutton_new(_buttons_get_icon_fct(gr->icon), 0, NULL);
     g_object_set_data(G_OBJECT(bt), "group", gr);
     g_signal_connect(bt, "button-press-event", G_CALLBACK(_manage_direct_popup), self);
     g_signal_connect(bt, "toggled", G_CALLBACK(_lib_modulegroups_toggle), self);
@@ -3262,7 +3217,8 @@ static void _buttons_update(dt_lib_module_t *self)
      ? !d->basics_show
      : d->current > g_list_length(d->groups))
   {
-    d->current = DT_MODULEGROUP_ACTIVE_PIPE;
+    // Tonelark layout: the develop panels
+    d->current = lr_tabs ? 1 : DT_MODULEGROUP_ACTIVE_PIPE;
   }
 
   if(d->current == DT_MODULEGROUP_ACTIVE_PIPE)

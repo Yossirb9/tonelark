@@ -45,6 +45,7 @@
 #include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
+#include "gui/lrpanels.h"
 #include "gui/presets.h"
 #include "gui/splash.h"
 #include "imageio/imageio_rawspeed.h"
@@ -3207,7 +3208,7 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
 
   /* add module label & instance name */
   GtkWidget *lab = gtk_event_box_new();
-  gchar *title = dt_ui_panel_title(module->name());
+  gchar *title = dt_ui_panel_title(dt_iop_get_localized_name(module->op));
   module->label = gtk_label_new(title);
   g_free(title);
   gtk_widget_set_name(module->label, "iop-panel-label");
@@ -3444,7 +3445,13 @@ const gchar *dt_iop_get_localized_name(const gchar *op)
     for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
     {
       dt_iop_module_so_t *module = iop->data;
-      g_hash_table_insert(module_names, module->op, g_strdup(module->name()));
+      // Tonelark: the Lightroom names ("Tone Curve", "HSL / Color"...), the
+      // other modules in title case like them
+      const char *lr = dt_lrp_module_title(module->op);
+      g_hash_table_insert(module_names, module->op,
+                          lr ? g_strdup(lr)
+                             : dt_lrp_names() ? dt_lrp_title_case(module->name())
+                                              : g_strdup(module->name()));
     }
   }
   if(op != NULL)

@@ -50,6 +50,7 @@
 #include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
 #include "gui/guides.h"
+#include "gui/lrpanels.h"
 #include "gui/presets.h"
 #include "gui/styles.h"
 #include "imageio/imageio_common.h"
@@ -3616,6 +3617,9 @@ void leave(dt_view_t *self)
     dt_iop_color_picker_reset(darktable.lib->proxy.colorpicker.picker_proxy->module, FALSE);
 
   DT_CONTROL_SIGNAL_DISCONNECT_ALL(self, "darkroom");
+
+  // the menu headers of the Lightroom panels belong to the darkroom
+  dt_lrp_cleanup();
 
   // store groups for next time:
   dt_conf_set_int("plugins/darkroom/groups", dt_dev_modulegroups_get(darktable.develop));
