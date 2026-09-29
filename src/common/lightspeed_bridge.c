@@ -790,7 +790,12 @@ static void _dispatch(const char *id, const char *cmd, JsonObject *args)
       return;
     }
 
-  // the others load or render images: in a job
+  // the others load or render images: in a job, which reads the database.
+  // The history of the photo open in the darkroom goes there at once, not
+  // at the next autosave
+  if(dt_view_get_current() == DT_VIEW_DARKROOM && darktable.develop && darktable.develop->gui_attached)
+    dt_dev_write_history(darktable.develop);
+
   _req_t *r = g_malloc0(sizeof(_req_t));
   r->id = g_strdup(id);
   r->cmd = g_strdup(cmd);

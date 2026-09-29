@@ -76,6 +76,7 @@ typedef struct dt_lib_aicull_t
   GtkWidget *sets, *ratings, *ratings_head, *ratings_wrap;
   dt_lsai_provider_ui_t *provider;
   guint ratings_idle;
+  gchar *sig;                 // what the ratings list shows
 } dt_lib_aicull_t;
 
 typedef enum _task_t
@@ -214,7 +215,7 @@ static gboolean _parse_note(const char *note, double *score, gchar **request, gc
 {
   static GRegex *re = NULL;
   if(!re)
-    re = g_regex_new("^\\S+ ([0-9]+(?:[.,][0-9]+)?)/10(?: for “(.*?)”)?: (.*)$", G_REGEX_DOTALL, 0, NULL);
+    re = g_regex_new("^\\S+ ([0-9]+(?:[.,][0-9]+)?)/10(?: for “(.*?)”)?:\\s+(.*)$", G_REGEX_DOTALL, 0, NULL);
   GMatchInfo *m = NULL;
   const gboolean ok = re && note && g_regex_match(re, note, 0, &m);
   if(ok)
@@ -551,13 +552,14 @@ static void _apply_cull(_job_t *j)
   _ratings_queue(j->self);
 }
 
-// "Codex 8.5/10 for “the best portrait”: the reason"
+// "Codex 8.5/10 for “the best portrait”:" and the reason on a line of its own
+// (a reason in Hebrew reads right to left, in the tooltips too)
 static gchar *_rate_note(const char *who, const double score, const char *criteria, const char *reason)
 {
   char num[G_ASCII_DTOSTR_BUF_SIZE];
   g_ascii_formatd(num, sizeof(num), "%.1f", score);
-  return criteria && *criteria ? g_strdup_printf("%s %s/10 for “%s”: %s", who, num, criteria, reason)
-                               : g_strdup_printf("%s %s/10: %s", who, num, reason);
+  return criteria && *criteria ? g_strdup_printf("%s %s/10 for “%s”:\n%s", who, num, criteria, reason)
+                               : g_strdup_printf("%s %s/10:\n%s", who, num, reason);
 }
 
 static void _apply_rate(_job_t *j)
@@ -706,24 +708,34 @@ static void _set_delete(GtkButton *b, dt_lib_module_t *self)
   _ratings_queue(self);
 }
 
+typedef struct _set_t
+{
+  int kind, count;
+  gboolean active;
+  gchar *request;
+} _set_t;
+
+static void _set_free(gpointer data)
+{
+  _set_t *t = data;
+  g_free(t->request);
+  g_free(t);
+}
+
 static void _ratings_update(dt_lib_module_t *self)
 {
   dt_lib_aicull_t *d = self->data;
   if(!d || !d->ratings) return;
-  for(int c = 0; c < 2; c++)
-  {
-    GList *children = gtk_container_get_children(GTK_CONTAINER(c ? d->ratings : d->sets));
-    for(GList *l = children; l; l = g_list_next(l)) gtk_widget_destroy(l->data);
-    g_list_free(children);
-  }
 
   // the ratings of the photos of the collection, the latest first, and theirs before AI
   // last; the ones on all their photos are highlighted, the one chosen last is listed
   const int last_kind = dt_conf_get_int(CONF "active_kind");
   gchar *last_request = dt_conf_get_string(CONF "active_request");
   int show_kind = -1, show_rank = 0;
-  gchar *show_request = NULL;
+  const char *show_request = NULL;
   gboolean shown_active = FALSE;
+  GPtrArray *sets = g_ptr_array_new_with_free_func(_set_free);
+  GString *sig = g_string_new("");
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -733,50 +745,25 @@ static void _ratings_update(dt_lib_module_t *self)
                               " ORDER BY r.kind = 1, MAX(r.time) DESC",
                               -1, &stmt, NULL);
   // clang-format on
-  int sets = 0;
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    const int kind = sqlite3_column_int(stmt, 0);
-    const char *request = (const char *)sqlite3_column_text(stmt, 1);
-    const int count = sqlite3_column_int(stmt, 2);
-    const gboolean active = sqlite3_column_int(stmt, 3) == count;
+    _set_t *t = g_malloc0(sizeof(_set_t));
+    t->kind = sqlite3_column_int(stmt, 0);
+    t->request = g_strdup((const char *)sqlite3_column_text(stmt, 1));
+    t->count = sqlite3_column_int(stmt, 2);
+    t->active = sqlite3_column_int(stmt, 3) == t->count;
+    g_ptr_array_add(sets, t);
     // listed: the one chosen last when it is on the photos, else the first on them, else the latest
-    const int rank = active && kind == last_kind && !g_strcmp0(request, last_request) ? 3 : active ? 2 : 1;
+    const int rank = t->active && t->kind == last_kind && !g_strcmp0(t->request, last_request) ? 3
+                   : t->active ? 2 : 1;
     if(rank > show_rank)
     {
       show_rank = rank;
-      show_kind = kind;
-      shown_active = active;
-      g_free(show_request);
-      show_request = g_strdup(request);
+      show_kind = t->kind;
+      show_request = t->request;
+      shown_active = t->active;
     }
-    gchar *name = _set_name(kind, request);
-    gchar *label = g_strdup_printf("%s  ·  %d", name, count);
-    g_free(name);
-    GtkWidget *b = gtk_button_new_with_label(label);
-    g_free(label);
-    gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(b))), PANGO_ELLIPSIZE_END);
-    gtk_label_set_xalign(GTK_LABEL(gtk_bin_get_child(GTK_BIN(b))), 0.0f);
-    gtk_widget_set_name(b, active ? "masking-row-selected" : "masking-row");
-    gtk_widget_set_tooltip_text(b, _("put the stars, pick flags and labels of this rating on its photos (green:"
-                                     " answers the request, red: to delete), and list them below. what you"
-                                     " change meanwhile stays with it"));
-    g_object_set_data(G_OBJECT(b), "kind", GINT_TO_POINTER(kind));
-    g_object_set_data_full(G_OBJECT(b), "request", g_strdup(request), g_free);
-    g_signal_connect(b, "clicked", G_CALLBACK(_set_clicked), self);
-    GtkWidget *row = dt_gui_hbox(dt_gui_expand(b));
-    if(kind != KIND_BEFORE)
-    {
-      GtkWidget *del = dtgtk_button_new(dtgtk_cairo_paint_remove, 0, NULL);
-      gtk_widget_set_tooltip_text(del, _("delete this rating, with its scores and reasons"));
-      g_object_set_data(G_OBJECT(del), "kind", GINT_TO_POINTER(kind));
-      g_object_set_data_full(G_OBJECT(del), "request", g_strdup(request), g_free);
-      g_signal_connect(del, "clicked", G_CALLBACK(_set_delete), self);
-      dt_gui_box_add(row, del);
-    }
-    dt_gui_box_add(d->sets, row);
-    gtk_widget_show_all(row);
-    sets++;
+    g_string_append_printf(sig, "%d|%s|%d|%d\n", t->kind, t->request, t->count, t->active);
   }
   sqlite3_finalize(stmt);
   g_free(last_request);
@@ -812,6 +799,62 @@ static void _ratings_update(dt_lib_module_t *self)
     sqlite3_finalize(stmt);
   }
   list = g_list_sort(list, _row_cmp);
+  g_string_append_printf(sig, "%d|%s|%d\n", show_kind, show_request ? show_request : "", shown_active);
+  for(GList *l = list; l; l = g_list_next(l))
+  {
+    const _row_t *r = l->data;
+    g_string_append_printf(sig, "%d|%.2f|%d|%d|%s\n", r->id, r->score, r->stars, r->trash, r->reason);
+  }
+
+  // the same as shown: nothing to do (a row rebuilt between the two clicks
+  // of a double click would lose it)
+  if(!g_strcmp0(sig->str, d->sig))
+  {
+    g_string_free(sig, TRUE);
+    g_list_free_full(list, _row_free);
+    g_ptr_array_free(sets, TRUE);
+    return;
+  }
+  g_free(d->sig);
+  d->sig = g_string_free(sig, FALSE);
+
+  for(int c = 0; c < 2; c++)
+  {
+    GList *children = gtk_container_get_children(GTK_CONTAINER(c ? d->ratings : d->sets));
+    for(GList *l = children; l; l = g_list_next(l)) gtk_widget_destroy(l->data);
+    g_list_free(children);
+  }
+
+  for(guint k = 0; k < sets->len; k++)
+  {
+    const _set_t *t = g_ptr_array_index(sets, k);
+    gchar *name = _set_name(t->kind, t->request);
+    gchar *label = g_strdup_printf("%s  ·  %d", name, t->count);
+    g_free(name);
+    GtkWidget *b = gtk_button_new_with_label(label);
+    g_free(label);
+    gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(b))), PANGO_ELLIPSIZE_END);
+    gtk_label_set_xalign(GTK_LABEL(gtk_bin_get_child(GTK_BIN(b))), 0.0f);
+    gtk_widget_set_name(b, t->active ? "masking-row-selected" : "masking-row");
+    gtk_widget_set_tooltip_text(b, _("put the stars, pick flags and labels of this rating on its photos (green:"
+                                     " answers the request, red: to delete), and list them below. what you"
+                                     " change meanwhile stays with it"));
+    g_object_set_data(G_OBJECT(b), "kind", GINT_TO_POINTER(t->kind));
+    g_object_set_data_full(G_OBJECT(b), "request", g_strdup(t->request), g_free);
+    g_signal_connect(b, "clicked", G_CALLBACK(_set_clicked), self);
+    GtkWidget *row = dt_gui_hbox(dt_gui_expand(b));
+    if(t->kind != KIND_BEFORE)
+    {
+      GtkWidget *del = dtgtk_button_new(dtgtk_cairo_paint_remove, 0, NULL);
+      gtk_widget_set_tooltip_text(del, _("delete this rating, with its scores and reasons"));
+      g_object_set_data(G_OBJECT(del), "kind", GINT_TO_POINTER(t->kind));
+      g_object_set_data_full(G_OBJECT(del), "request", g_strdup(t->request), g_free);
+      g_signal_connect(del, "clicked", G_CALLBACK(_set_delete), self);
+      dt_gui_box_add(row, del);
+    }
+    dt_gui_box_add(d->sets, row);
+    gtk_widget_show_all(row);
+  }
 
   const int n = g_list_length(list);
   gchar *name = show_kind >= 0 ? _set_name(show_kind, show_request) : NULL;
@@ -824,7 +867,6 @@ static void _ratings_update(dt_lib_module_t *self)
   gtk_label_set_text(GTK_LABEL(d->ratings_head), head);
   g_free(head);
   g_free(name);
-  g_free(show_request);
 
   int k = 0;
   for(GList *l = list; l && k < RATINGS_MAX; l = g_list_next(l), k++)
@@ -874,9 +916,10 @@ static void _ratings_update(dt_lib_module_t *self)
     gtk_box_pack_start(GTK_BOX(d->ratings), row, FALSE, FALSE, 0);
   }
   g_list_free_full(list, _row_free);
-  gtk_widget_set_visible(d->sets, sets > 0);
+  gtk_widget_set_visible(d->sets, sets->len > 0);
   gtk_widget_set_visible(d->ratings_wrap, n > 0);
   gtk_widget_show_all(d->ratings);
+  g_ptr_array_free(sets, TRUE);
 }
 
 static gboolean _ratings_idle(gpointer data)
@@ -1291,6 +1334,7 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_aicull_t *d = self->data;
   if(d->ratings_idle) g_source_remove(d->ratings_idle);
+  g_free(d->sig);
   dt_lsai_provider_ui_free(d->provider);
   g_free(self->data);
   self->data = NULL;
