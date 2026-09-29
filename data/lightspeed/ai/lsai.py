@@ -18,6 +18,7 @@ vision or an AI model:
             reference photo (on this computer)
   keywords  keywords, title and caption of photos on contact sheets
   crop      crop and straighten suggestions
+  faces     the faces of the photos, with an embedding to recognise the people
   mcp       connect Claude Code / Codex / Gemini chats to Tonelark (MCP)
   providers which command line AI tools are installed and logged in
 
@@ -208,6 +209,55 @@ class Faces:
 
 
 FACES = Faces()
+
+SFACE = os.path.join(MODELS, 'face_recognition_sface_2021dec.onnx')
+
+
+def cmd_faces(req):
+    """the people of the photos: every face big enough to be recognised, with
+    its box (0..1 of the photo), an embedding of 128 numbers (SFace, the same
+    person gives close embeddings: cosine similarity) and a small square
+    thumbnail for the People panel. On this computer, nothing is sent."""
+    import base64
+    rec = cv2.FaceRecognizerSF.create(SFACE, '')
+    images = req['images']
+    out, errors = [], []
+    for k, im in enumerate(images):
+        progress(k / max(1, len(images)), 'looking for faces %d/%d' % (k + 1, len(images)))
+        try:
+            img8, _ = downscale(to8(imread(im['path'], cv2.IMREAD_COLOR)), ANALYSIS_SIDE)
+        except Exception as e:     # noqa: BLE001
+            errors.append('%s: %s' % (im.get('id'), e))
+            continue
+        h, w = img8.shape[:2]
+        faces = []
+        for f in FACES.detect(img8):
+            x, y, fw, fh = f['box']
+            # small or unsure faces give embeddings that mix people up
+            if fw < 40 or fh < 40 or f['score'] < 0.8:
+                continue
+            row = np.array([x, y, fw, fh] + list(f['lm'].reshape(-1)) + [f['score']], dtype=np.float32)
+            aligned = rec.alignCrop(img8, row)
+            emb = rec.feature(aligned).reshape(-1).astype(np.float32)
+            n = float(np.linalg.norm(emb))
+            if n <= 0:
+                continue
+            emb /= n
+            # the thumbnail: a square around the face with some hair and chin
+            side = int(max(fw, fh) * 1.6)
+            cx, cy = x + fw / 2.0, y + fh / 2.0
+            x0, y0 = int(max(0, cx - side / 2)), int(max(0, cy - side / 2))
+            x1, y1 = int(min(w, x0 + side)), int(min(h, y0 + side))
+            crop = img8[y0:y1, x0:x1]
+            thumb = cv2.resize(crop, (96, 96), interpolation=cv2.INTER_AREA)
+            ok, jpg = cv2.imencode('.jpg', thumb, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            faces.append(dict(box=[x / w, y / h, fw / w, fh / h], score=f['score'],
+                              sharp=Faces.sharpness(img8, f),
+                              emb=base64.b64encode(emb.tobytes()).decode('ascii'),
+                              thumb=base64.b64encode(jpg.tobytes()).decode('ascii') if ok else ''))
+        out.append(dict(id=im['id'], faces=faces))
+    progress(1.0, 'done')
+    return dict(images=out, errors=errors)
 
 
 # ---------------------------------------------------------------------------
@@ -1283,7 +1333,7 @@ def cmd_mcp(req):
 
 COMMANDS = dict(cull=cmd_cull, rate=cmd_rate, besttake=cmd_besttake, genedit=cmd_genedit,
                 providers=cmd_providers, autoedit=cmd_autoedit, match=cmd_match, keywords=cmd_keywords,
-                crop=cmd_crop, mcp=cmd_mcp)
+                crop=cmd_crop, mcp=cmd_mcp, faces=cmd_faces)
 
 
 def main():

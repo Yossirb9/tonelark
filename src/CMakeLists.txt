@@ -65,6 +65,7 @@ FILE(GLOB SOURCE_FILES
   "common/lightroom_catalog.c"
   "common/lightspeed_ai.c"
   "common/lightspeed_bridge.c"
+  "common/people.c"
   "common/interpolation.c"
   "common/iop_group.c"
   "common/iop_order.c"

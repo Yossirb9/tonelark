@@ -27,6 +27,7 @@
 #include "common/lightspeed_ai.h"
 #include "common/lightspeed_version.h"
 #include "common/metadata.h"
+#include "common/people.h"
 #include "common/ratings.h"
 #include "common/selection.h"
 #include "common/tags.h"
@@ -558,11 +559,71 @@ static JsonObject *_cmd_open(JsonObject *args, gchar **error)
   return _done(1);
 }
 
+// the people found in the photos (Library > People)
+static JsonObject *_cmd_people(JsonObject *args, gchar **error)
+{
+  dt_people_init();
+  JsonObject *o = json_object_new();
+  json_object_set_array_member(o, "people", dt_people_list());
+  return o;
+}
+
+// a person: its name (the name of another person merges the two), photos that
+// are not of it, hidden; with "photos", the ids of its photos
+static JsonObject *_cmd_person(JsonObject *args, gchar **error)
+{
+  dt_people_init();
+  const int person = json_object_get_int_member_with_default(args, "person", 0);
+  gchar *name = dt_people_name(person);
+  GList *imgs = dt_people_images(person);
+  if(!imgs)
+  {
+    *error = g_strdup("no such person: see the ids of people");
+    g_free(name);
+    return NULL;
+  }
+  g_list_free(imgs);
+  g_free(name);
+  JsonObject *o = json_object_new();
+  int id = person;
+  if(json_object_has_member(args, "name"))
+  {
+    const int into = dt_people_rename(person, _str(args, "name"));
+    if(into) id = into;
+    json_object_set_int_member(o, "person", id);
+    json_object_set_boolean_member(o, "merged", into != 0);
+  }
+  if(json_object_has_member(args, "not_in"))
+  {
+    GList *ids = NULL;
+    JsonArray *a = json_object_get_array_member(args, "not_in");
+    for(guint k = 0; a && k < json_array_get_length(a); k++)
+      ids = g_list_prepend(ids, GINT_TO_POINTER((int)json_array_get_int_element(a, k)));
+    json_object_set_int_member(o, "taken_out", dt_people_not(id, ids));
+    g_list_free(ids);
+  }
+  if(json_object_has_member(args, "hidden"))
+    dt_people_hide(id, json_object_get_boolean_member(args, "hidden"));
+  JsonArray *photos = json_array_new();
+  imgs = dt_people_images(id);
+  for(GList *l = imgs; l; l = g_list_next(l)) json_array_add_int_element(photos, GPOINTER_TO_INT(l->data));
+  g_list_free(imgs);
+  json_object_set_array_member(o, "photos", photos);
+  name = dt_people_name(id);
+  if(name)
+    json_object_set_string_member(o, "name", name);
+  else
+    json_object_set_null_member(o, "name");
+  g_free(name);
+  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_TAG, NULL);
+  return o;
+}
+
 // a button of an AI panel, on the given photos
 static JsonObject *_cmd_action(JsonObject *args, gchar **error)
 {
   const char *path = _str(args, "action");
-  static const char *allowed[] = { "lib/aicull/", "lib/aiassist/", NULL };
+  static const char *allowed[] = { "lib/aicull/", "lib/aiassist/", "lib/people/", NULL };
   gboolean ok = FALSE;
   for(int k = 0; path && allowed[k]; k++)
     if(g_str_has_prefix(path, allowed[k])) ok = TRUE;
@@ -773,6 +834,7 @@ static void _dispatch(const char *id, const char *cmd, JsonObject *args)
   {
     { "list", _cmd_list }, { "rate", _cmd_rate }, { "flag", _cmd_flag }, { "label", _cmd_label }, { "tag", _cmd_tag },
     { "describe", _cmd_describe }, { "select", _cmd_select }, { "open", _cmd_open }, { "action", _cmd_action },
+    { "people", _cmd_people }, { "person", _cmd_person },
   };
 
   if(!g_strcmp0(cmd, "status"))

@@ -6,7 +6,7 @@ add_definitions(-include common/module_api.h)
 add_definitions(-include libs/lib_api.h)
 
 # The modules
-set(MODULES import export copy_history styles tagging image select collect recentcollect filtering metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks session duplicate ioporder basicpanel panelbuttons_left panelbuttons_right aicull aiedit aiassist masking)
+set(MODULES import export copy_history styles tagging image select collect recentcollect filtering metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks session duplicate ioporder basicpanel panelbuttons_left panelbuttons_right aicull aiedit aiassist masking people)
 
 # The tools
 set(MODULES ${MODULES} viewswitcher)
@@ -54,6 +54,7 @@ add_library(aicull MODULE "aicull.c")
 add_library(aiedit MODULE "aiedit.c")
 add_library(aiassist MODULE "aiassist.c")
 add_library(masking MODULE "masking.c")
+add_library(people MODULE "people.c")
 add_library(panelbuttons_right MODULE "panelbuttons_right.c")
 
 # tools

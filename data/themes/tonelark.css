@@ -508,3 +508,48 @@ tooltip label,
   color: @ls_text;
   font-size: 0.86em;
 }
+
+/* People: a face per person, its name and its number of photos */
+#people-tile,
+#people-tile-shown
+{
+  padding: 2px;
+  border-radius: 3px;
+}
+
+#people-tile:hover
+{
+  background-color: alpha(#ffffff, 0.06);
+}
+
+#people-tile-shown
+{
+  background-color: #5d6b80;
+}
+
+#people-name
+{
+  color: @ls_text_hi;
+  font-size: 0.85em;
+}
+
+#people-unnamed
+{
+  color: @ls_text_dim;
+  font-size: 0.85em;
+  font-style: italic;
+}
+
+#people-count
+{
+  color: @ls_text_dim;
+  font-size: 0.78em;
+  padding-left: 3px;
+}
+
+#people-head
+{
+  color: @ls_text_dim;
+  font-size: 0.9em;
+  padding: 0.2em 0;
+}

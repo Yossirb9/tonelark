@@ -100,6 +100,7 @@ AI_TOOLS = {
     'match_look': 'lib/aiassist/Match Look',
     'keywords_and_captions': 'lib/aiassist/Keywords & Captions',
     'suggest_crops': 'lib/aiassist/Suggest Crops',
+    'find_people': 'lib/people/Find People',
 }
 
 TOOLS = [
@@ -148,12 +149,16 @@ TOOLS = [
          inputSchema={'type': 'object', 'properties': {'from_id': {'type': 'integer'}, 'to_ids': IDS}, 'required': ['from_id', 'to_ids']}),
     dict(name='export_photos', description='Export photos as JPEG files with their edits.',
          inputSchema={'type': 'object', 'properties': {'ids': IDS, 'folder': {'type': 'string', 'description': 'absolute folder path'}, 'max_size': {'type': 'integer', 'description': 'longest side in pixels, 0 = full size', 'default': 0}, 'quality': {'type': 'integer', 'default': 92}}, 'required': ['ids', 'folder']}),
-    dict(name='run_ai_tool', description='Run one of the AI tools of Tonelark on photos (they work on contact sheets, cheaply, and the results appear in Tonelark: stars, flags, notes, edits, keywords). find_best_shots works on this computer without AI. The photos must be in the collection Tonelark shows (list_photos scope collection). Check the results later with list_photos.',
+    dict(name='run_ai_tool', description='Run one of the AI tools of Tonelark on photos (they work on contact sheets, cheaply, and the results appear in Tonelark: stars, flags, notes, edits, keywords). find_best_shots and find_people (faces grouped by person, for list_people) work on this computer without AI. The photos must be in the collection Tonelark shows (list_photos scope collection). Check the results later with list_photos.',
          inputSchema={'type': 'object', 'properties': {'tool': {'type': 'string', 'enum': sorted(AI_TOOLS)}, 'ids': IDS, 'instruction': {'type': 'string', 'description': 'for auto_edit: the look to make; for rate_with_ai: what to look for (e.g. "the best portrait"): the photos are rated by how well they answer it, with the reason of each score in its notes'}}, 'required': ['tool', 'ids']}),
+    dict(name='list_people', description='The people Tonelark found in the photos (Library > People, or run_ai_tool find_people): id, name (null: unnamed yet) and number of photos. The photos of a named person have the keyword people|<name>, so list_photos search finds them.',
+         inputSchema={'type': 'object', 'properties': {}}),
+    dict(name='name_person', description='Give a person of list_people a name (its photos get the keyword people|<name>); the name of another person merges the two as one. Also: not_in, photo ids the person is not in (taken out for good); hidden, hide it from the People panel. Answers with the ids of its photos.',
+         inputSchema={'type': 'object', 'properties': {'person': {'type': 'integer'}, 'name': {'type': 'string'}, 'not_in': IDS, 'hidden': {'type': 'boolean'}}, 'required': ['person']}),
 ]
 
 # what each tool does, for the approval prompts of the chat tools
-READ_ONLY = {'tonelark_status', 'list_photos', 'get_photo', 'view_photos'}
+READ_ONLY = {'tonelark_status', 'list_photos', 'get_photo', 'view_photos', 'list_people'}
 for _t in TOOLS:
     _ro = _t['name'] in READ_ONLY
     _t['annotations'] = dict(readOnlyHint=_ro, destructiveHint=False, openWorldHint=False,
@@ -293,6 +298,10 @@ def run_tool(name, a):
     if name == 'export_photos':
         return _text(call('export', {k: a[k] for k in ('ids', 'folder', 'max_size', 'quality') if k in a},
                           120 + 60 * len(ids or [])))
+    if name == 'list_people':
+        return _text(call('people', {}))
+    if name == 'name_person':
+        return _text(call('person', {k: a[k] for k in ('person', 'name', 'not_in', 'hidden') if k in a}))
     if name == 'run_ai_tool':
         tool = AI_TOOLS.get(a.get('tool'))
         if not tool:
