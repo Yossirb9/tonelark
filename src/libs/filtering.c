@@ -47,6 +47,7 @@ DT_MODULE(1)
 static const dt_introspection_type_enum_tuple_t _collection_sort_names[]
   = { { N_("filename"), DT_COLLECTION_SORT_FILENAME },
       { N_("full path"), DT_COLLECTION_SORT_PATH },
+      { N_("file type"), DT_COLLECTION_SORT_FILETYPE },
       { N_("aspect ratio"), DT_COLLECTION_SORT_ASPECT_RATIO },
 
       { N_("capture time"), DT_COLLECTION_SORT_DATETIME },
@@ -216,6 +217,7 @@ typedef struct _filter_t
 #include "libs/filters/local_copy.c"
 #include "libs/filters/duplicates.c"
 #include "libs/filters/flag.c"
+#include "libs/filters/filetype.c"
 #include "libs/filters/misc.c"
 #include "libs/filters/module_order.c"
 #include "libs/filters/rating.c"
@@ -245,6 +247,7 @@ static _filter_t filters[]
         { DT_COLLECTION_PROP_DUPLICATES, _duplicates_widget_init, _duplicates_update },
         { DT_COLLECTION_PROP_LOCAL_COPY, _local_copy_widget_init, _local_copy_update },
         { DT_COLLECTION_PROP_FLAG, _flag_widget_init, _flag_update },
+        { DT_COLLECTION_PROP_FILETYPE, _filetype_widget_init, _filetype_update },
         { DT_COLLECTION_PROP_HISTORY, _history_widget_init, _history_update },
         { DT_COLLECTION_PROP_ORDER, _module_order_widget_init, _module_order_update },
         { DT_COLLECTION_PROP_RATING, _rating_widget_init, _rating_update },
@@ -295,18 +298,22 @@ void init_presets(dt_lib_module_t *self)
     params.sort[0].order = 0;                                                                                     \
   }
 
-  // initial preset (Tonelark: the flag, color label and rating filters of the Lightroom library)
+  // initial preset (Tonelark: the flag, file type, color label and rating filters of the Lightroom library)
   CLEAR_PARAMS(_PRESET_ALL, DT_COLLECTION_PROP_FLAG, DT_COLLECTION_SORT_DATETIME);
-  params.rules = 3;
+  params.rules = 4;
   params.rule[0].topbar = 1;
-  params.rule[1].item = DT_COLLECTION_PROP_COLORLABEL;
+  params.rule[1].item = DT_COLLECTION_PROP_FILETYPE;
   params.rule[1].mode = 0;
   params.rule[1].off = 0;
   params.rule[1].topbar = 1;
-  params.rule[2].item = DT_COLLECTION_PROP_RATING_RANGE;
+  params.rule[2].item = DT_COLLECTION_PROP_COLORLABEL;
   params.rule[2].mode = 0;
   params.rule[2].off = 0;
   params.rule[2].topbar = 1;
+  params.rule[3].item = DT_COLLECTION_PROP_RATING_RANGE;
+  params.rule[3].mode = 0;
+  params.rule[3].off = 0;
+  params.rule[3].topbar = 1;
   dt_lib_presets_add(_("initial setting"), self->plugin_name, self->version(), &params, sizeof(params), TRUE, 0);
 
   // based on aspect-ratio
@@ -892,6 +899,7 @@ static gboolean _rule_show_popup(GtkWidget *widget, dt_lib_filtering_rule_t *rul
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_FILMROLL);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_FOLDERS);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_FILENAME);
+  ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_FILETYPE);
 
   _popup_add_item(spop, _("metadata"), 0, TRUE, NULL, NULL, self, 0.0);
   ADD_COLLECT_ENTRY(spop, DT_COLLECTION_PROP_TAG);
@@ -954,6 +962,7 @@ static void _populate_rules_combo(GtkWidget *w)
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILMROLL);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FOLDERS);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILENAME);
+  ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILETYPE);
 
   dt_bauhaus_combobox_add_section(w, _("metadata"));
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_TAG);
@@ -1624,6 +1633,7 @@ static void _topbar_populate_rules_combo(GtkWidget *w, dt_lib_filtering_t *d)
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILMROLL);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FOLDERS);
   ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILENAME);
+  ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILETYPE);
   // if we have not added any entry, remove the section
   if(nb == dt_bauhaus_combobox_length(w)) dt_bauhaus_combobox_remove_at(w, nb - 1);
 

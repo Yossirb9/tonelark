@@ -92,6 +92,46 @@ const dt_collection_t *dt_collection_new(const dt_collection_t *clone)
     }
     dt_conf_set_bool("lightspeed/filter_flag", TRUE);
   }
+  // Tonelark: the file type filter in the top bar, after the flag filter, once
+  if(!clone && !dt_conf_key_exists("lightspeed/filter_filetype"))
+  {
+    const int n = CLAMP(dt_conf_get_int("plugins/lighttable/filtering/num_rules"), 0, DT_COLLECTION_MAX_RULES);
+    static const char *keys[] = { "item", "mode", "off", "top", "string" };
+    char confname[200] = { 0 };
+    int pos = n, found = FALSE;
+    for(int i = 0; i < n; i++)
+    {
+      snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/item%1d", i);
+      const int item = dt_conf_get_int(confname);
+      if(item == DT_COLLECTION_PROP_FILETYPE) found = TRUE;
+      if(item == DT_COLLECTION_PROP_FLAG && pos == n) pos = i + 1;
+    }
+    if(!found && n < DT_COLLECTION_MAX_RULES)
+    {
+      // the rules after it one place down
+      for(int j = n - 1; j >= pos; j--)
+        for(int k = 0; k < G_N_ELEMENTS(keys); k++)
+        {
+          snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/%s%1d", keys[k], j);
+          gchar *value = dt_conf_get_string(confname);
+          snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/%s%1d", keys[k], j + 1);
+          dt_conf_set_string(confname, value);
+          g_free(value);
+        }
+      snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/item%1d", pos);
+      dt_conf_set_int(confname, DT_COLLECTION_PROP_FILETYPE);
+      snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/mode%1d", pos);
+      dt_conf_set_int(confname, 0);
+      snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/off%1d", pos);
+      dt_conf_set_int(confname, 0);
+      snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/top%1d", pos);
+      dt_conf_set_int(confname, 1);
+      snprintf(confname, sizeof(confname), "plugins/lighttable/filtering/string%1d", pos);
+      dt_conf_set_string(confname, "");
+      dt_conf_set_int("plugins/lighttable/filtering/num_rules", n + 1);
+    }
+    dt_conf_set_bool("lightspeed/filter_filetype", TRUE);
+  }
 
   dt_collection_t *collection = g_malloc0(sizeof(dt_collection_t));
 
@@ -673,6 +713,8 @@ const char *dt_collection_name_untranslated(const dt_collection_properties_t pro
       return N_("local copy");
     case DT_COLLECTION_PROP_FLAG:
       return N_("flag");
+    case DT_COLLECTION_PROP_FILETYPE:
+      return N_("file type");
     case DT_COLLECTION_PROP_MODULE:
       return N_("module");
     case DT_COLLECTION_PROP_ORDER:
@@ -697,6 +739,71 @@ const char *dt_collection_name_untranslated(const dt_collection_properties_t pro
       return NULL;
   }
   return col_name;
+}
+
+// Tonelark: the kinds of files, by the extension of the name
+static const struct
+{
+  const char *name, *code, *ext;
+} _filetypes[DT_FILETYPE_LAST] = {
+  { "RAW", "$RAW", "" },
+  { "JPEG", "$JPEG", " jpg jpeg jpe jfif " },
+  { "HEIF", "$HEIF", " heic heif hif " },
+  { "TIFF", "$TIFF", " tif tiff " },
+  { "PNG", "$PNG", " png " },
+  { "DNG", "$DNG", " dng " },
+  { "AVIF", "$AVIF", " avif " },
+  { "WebP", "$WEBP", " webp " },
+  { "JPEG XL", "$JXL", " jxl " },
+  { "EXR", "$EXR", " exr " },
+  { N_("other"), "$OTHER", " pfm hdr pnm ppm pgm pbm j2k jp2 jpf jpx jpc qoi gif psd bmp " },
+};
+
+dt_collection_filetype_t dt_collection_filetype(const char *filename)
+{
+  // " ext " in the lists of the extensions (it runs for each photo of a query)
+  const char *dot = filename ? strrchr(filename, '.') : NULL;
+  if(!dot || !dot[1] || strlen(dot + 1) > 8) return DT_FILETYPE_RAW;
+  char key[12] = " ";
+  int n = 1;
+  for(const char *c = dot + 1; *c; c++) key[n++] = g_ascii_tolower(*c);
+  key[n++] = ' ';
+  key[n] = '\0';
+  for(int t = 1; t < DT_FILETYPE_LAST; t++)
+    if(strstr(_filetypes[t].ext, key)) return t;
+  return DT_FILETYPE_RAW;
+}
+
+const char *dt_collection_filetype_name(const dt_collection_filetype_t type)
+{
+  if(type < 0 || type >= DT_FILETYPE_LAST) return "";
+  return type == DT_FILETYPE_OTHER ? _(_filetypes[type].name) : _filetypes[type].name;
+}
+
+const char *dt_collection_filetype_code(const dt_collection_filetype_t type)
+{
+  return type < 0 || type >= DT_FILETYPE_LAST ? "" : _filetypes[type].code;
+}
+
+int dt_collection_filetype_from_code(const char *code)
+{
+  for(int t = 0; code && t < DT_FILETYPE_LAST; t++)
+    if(!g_strcmp0(code, _filetypes[t].code)) return t;
+  return -1;
+}
+
+static void _sql_filetype(sqlite3_context *context, int argc, sqlite3_value **argv)
+{
+  const char *filename = argc > 0 ? (const char *)sqlite3_value_text(argv[0]) : NULL;
+  sqlite3_result_int(context, dt_collection_filetype(filename));
+}
+
+void dt_collection_sql_init(struct sqlite3 *handle)
+{
+  if(!handle) return;
+  if(sqlite3_create_function(handle, "ls_filetype", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, NULL,
+                             _sql_filetype, NULL, NULL) != SQLITE_OK)
+    dt_print(DT_DEBUG_ALWAYS, "[collection] can't add the function ls_filetype");
 }
 
 const char *dt_collection_name(const dt_collection_properties_t prop)
@@ -790,6 +897,10 @@ static gchar *_dt_collection_get_sort_text(const dt_collection_sort_t sort,
     case DT_COLLECTION_SORT_SHUFFLE:
       sq = g_strdup("RANDOM()"); /* do not consider second order for shuffle */
       /* do not remember shuffle for second order */
+      break;
+
+    case DT_COLLECTION_SORT_FILETYPE:
+      sq = g_strdup_printf("ls_filetype(filename)%s", (sortorder) ? " DESC" : "");
       break;
 
     case DT_COLLECTION_SORT_NONE:
@@ -1588,6 +1699,13 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
         query = g_strdup_printf("(flags & %d = 0) ", DT_IMAGE_REJECTED);
       else
         query = g_strdup("1 = 1");
+      break;
+    }
+
+    case DT_COLLECTION_PROP_FILETYPE: // Tonelark: RAW, JPEG, HEIF...
+    {
+      const int type = dt_collection_filetype_from_code(escaped_text);
+      query = type < 0 ? g_strdup("1 = 1") : g_strdup_printf("(ls_filetype(filename) = %d) ", type);
       break;
     }
 

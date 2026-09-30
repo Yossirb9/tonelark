@@ -65,8 +65,27 @@ typedef enum dt_collection_sort_t
   DT_COLLECTION_SORT_DESCRIPTION,
   DT_COLLECTION_SORT_ASPECT_RATIO,
   DT_COLLECTION_SORT_SHUFFLE,
+  DT_COLLECTION_SORT_FILETYPE, // Tonelark: RAW, JPEG, HEIF...
   DT_COLLECTION_SORT_LAST
 } dt_collection_sort_t;
+
+// Tonelark: the kinds of files of the file type filter and sort, by the
+// extension of the name; ls_filetype(filename) in the queries
+typedef enum dt_collection_filetype_t
+{
+  DT_FILETYPE_RAW = 0, // every extension not below
+  DT_FILETYPE_JPEG,
+  DT_FILETYPE_HEIF,
+  DT_FILETYPE_TIFF,
+  DT_FILETYPE_PNG,
+  DT_FILETYPE_DNG,
+  DT_FILETYPE_AVIF,
+  DT_FILETYPE_WEBP,
+  DT_FILETYPE_JXL,
+  DT_FILETYPE_EXR,
+  DT_FILETYPE_OTHER,
+  DT_FILETYPE_LAST
+} dt_collection_filetype_t;
 
 #define DT_COLLECTION_ORDER_FLAG 0x8000
 
@@ -125,6 +144,9 @@ typedef enum dt_collection_properties_t
 
   // Tonelark: the pick flag (tag darktable|pick) and reject, like Lightroom
   DT_COLLECTION_PROP_FLAG,
+
+  // Tonelark: RAW, JPEG, HEIF... (dt_collection_filetype_t)
+  DT_COLLECTION_PROP_FILETYPE,
 
   // all new collection types need to be added before DT_COLLECTION_PROP_LAST,
   // which separates actual collection types from special flag values
@@ -218,6 +240,15 @@ void dt_collection_set_tag_id(dt_collection_t *collection, const uint32_t tagid)
 
 /** get the part of the query for sorting the collection **/
 gchar *dt_collection_get_sort_query(const dt_collection_t *collection);
+
+/** Tonelark: the kind of file of a name (dt_collection_filetype_t), its name
+    (RAW, JPEG...) and its code in the rules of the filter ($RAW, $JPEG...) */
+dt_collection_filetype_t dt_collection_filetype(const char *filename);
+const char *dt_collection_filetype_name(const dt_collection_filetype_t type);
+const char *dt_collection_filetype_code(const dt_collection_filetype_t type);
+int dt_collection_filetype_from_code(const char *code); // -1: all
+/** Tonelark: ls_filetype(filename) for the queries of the database */
+void dt_collection_sql_init(struct sqlite3 *handle);
 /* serialize and deserialize sorting into a string. */
 void dt_collection_sort_deserialize(const char *buf);
 void dt_collection_sort_serialize(char *buf, int bufsize);

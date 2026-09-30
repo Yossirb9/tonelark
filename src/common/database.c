@@ -29,6 +29,7 @@
 #include "common/metadata.h"
 #ifdef HAVE_ICU
 #include "common/sqliteicu.h"
+#include "common/collection.h"
 #endif
 #include "control/conf.h"
 #include "control/control.h"
@@ -4854,6 +4855,8 @@ start:
       dt_print(DT_DEBUG_ALWAYS, "[sqlite] init icu extension error %d", rc);
   }
 #endif
+  // Tonelark: ls_filetype(filename), the file type filter and sort
+  dt_collection_sql_init(db->handle);
 
 error:
   g_free(dbname);
