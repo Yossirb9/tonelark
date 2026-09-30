@@ -2257,6 +2257,48 @@ void dt_ui_toggle_panels_visibility(const struct dt_ui_t *ui)
   g_free(key);
 }
 
+// Tonelark: the photo alone on the whole screen, as the full screen preview
+// of Lightroom: the window full screen, the panels and the handles of the
+// borders hidden; off, the window and the panels as they were
+static gboolean _photo_fs = FALSE, _photo_fs_window = FALSE;
+static int _photo_fs_collapsed = 0;
+
+gboolean dt_ui_photo_fullscreen_active(void)
+{
+  return _photo_fs;
+}
+
+void dt_ui_photo_fullscreen(const gboolean on)
+{
+  if(on == _photo_fs || !darktable.gui) return;
+  dt_ui_t *ui = darktable.gui->ui;
+  GtkWidget *win = dt_ui_main_window(ui);
+  gchar *key = _panels_get_view_path("panel_collaps_state");
+  if(!key) return;
+  if(on)
+  {
+    _photo_fs_window = (gdk_window_get_state(gtk_widget_get_window(win)) & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+    _photo_fs_collapsed = dt_conf_get_int(key);
+    dt_conf_set_int(key, 1);
+    dt_ui_restore_panels(ui);
+    gtk_widget_hide(darktable.gui->widgets.left_border);
+    gtk_widget_hide(darktable.gui->widgets.right_border);
+    gtk_widget_hide(darktable.gui->widgets.top_border);
+    gtk_widget_hide(darktable.gui->widgets.bottom_border);
+    if(!_photo_fs_window) gtk_window_fullscreen(GTK_WINDOW(win));
+  }
+  else
+  {
+    dt_conf_set_int(key, _photo_fs_collapsed);
+    dt_ui_restore_panels(ui);
+    if(!_photo_fs_window) gtk_window_unfullscreen(GTK_WINDOW(win));
+  }
+  g_free(key);
+  _photo_fs = on;
+  if(darktable.develop) dt_dev_invalidate(darktable.develop);
+  gtk_widget_queue_draw(win);
+}
+
 void dt_ui_notify_user()
 {
   if(darktable.gui

@@ -1556,6 +1556,16 @@ static void zoom_out_callback(dt_action_t *action)
   scrolled(self, dev->full.width / 2, dev->full.height / 2, 0, GDK_CONTROL_MASK);
 }
 
+static void _fullscreen_preview_callback(dt_action_t *action)
+{
+  dt_ui_photo_fullscreen(!dt_ui_photo_fullscreen_active());
+}
+
+static void _fullscreen_preview_leave_callback(dt_action_t *action)
+{
+  dt_ui_photo_fullscreen(FALSE);
+}
+
 static void skip_f_key_accel_callback(dt_action_t *action)
 {
   _dev_jump_image(dt_action_view(action)->data, 1, TRUE);
@@ -3390,6 +3400,12 @@ void gui_init(dt_view_t *self)
   dt_action_register(DT_ACTION(self), N_("zoom out"), zoom_out_callback,
                      GDK_KEY_minus, GDK_CONTROL_MASK);
 
+  // Tonelark: the photo alone on the whole screen (F), as in Lightroom
+  dt_action_register(DT_ACTION(self), N_("full screen preview"), _fullscreen_preview_callback,
+                     GDK_KEY_f, 0);
+  dt_action_register(DT_ACTION(self), N_("leave full screen preview"), _fullscreen_preview_leave_callback,
+                     GDK_KEY_Escape, 0);
+
   // Shortcut to skip images
   dt_action_register(DT_ACTION(self), N_("image forward"), skip_f_key_accel_callback,
                      GDK_KEY_space, 0);
@@ -3612,6 +3628,7 @@ static inline void _clear_pipecache(dt_dev_pixelpipe_t *pipe)
 
 void leave(dt_view_t *self)
 {
+  dt_ui_photo_fullscreen(FALSE);
   dt_iop_color_picker_cleanup();
   if(darktable.lib->proxy.colorpicker.picker_proxy)
     dt_iop_color_picker_reset(darktable.lib->proxy.colorpicker.picker_proxy->module, FALSE);

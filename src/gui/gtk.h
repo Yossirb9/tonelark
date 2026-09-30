@@ -359,6 +359,9 @@ void dt_ui_update_scrollbars(struct dt_ui_t *ui);
 void dt_ui_scrollbars_show(struct dt_ui_t *ui, const gboolean show);
 /** \brief toggle view of panels eg. collapse/expands to previous view state */
 void dt_ui_toggle_panels_visibility(const struct dt_ui_t *ui);
+/** Tonelark: the photo alone on the whole screen (F in the develop view) */
+void dt_ui_photo_fullscreen(const gboolean on);
+gboolean dt_ui_photo_fullscreen_active(void);
 /** \brief draw user's attention */
 void dt_ui_notify_user();
 /** \brief get visible state of panel */
