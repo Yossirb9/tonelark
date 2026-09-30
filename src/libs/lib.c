@@ -998,8 +998,9 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->expander), expanded);
 
   /* update expander arrow state */
-  gint flags = (expanded ? CPF_DIRECTION_DOWN : CPF_DIRECTION_RIGHT);
-  dtgtk_button_set_paint(DTGTK_BUTTON(module->arrow), dtgtk_cairo_paint_solid_arrow,
+  // Tonelark: a chevron on the right, up when the module is open
+  gint flags = (expanded ? CPF_DIRECTION_UP : CPF_DIRECTION_RIGHT);
+  dtgtk_button_set_paint(DTGTK_BUTTON(module->arrow), dtgtk_cairo_paint_arrow,
                          flags, NULL);
 
   darktable.lib->gui_module = expanded ? module : NULL;
@@ -1288,6 +1289,7 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   gtk_widget_set_name(GTK_WIDGET(header), "module-header");
 
   GtkWidget *expander = dtgtk_expander_new(header, module->widget);
+  gtk_widget_set_name(expander, "lib-expander");   // Tonelark: a card of the theme
   GtkWidget *header_evb = dtgtk_expander_get_header_event_box(DTGTK_EXPANDER(expander));
   GtkWidget *body_evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(expander));
   GtkWidget *pluginui_frame = dtgtk_expander_get_frame(DTGTK_EXPANDER(expander));
@@ -1321,13 +1323,15 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
    * initialize the header widgets
    */
   /* add the expand indicator icon */
-  module->arrow = dtgtk_button_new(dtgtk_cairo_paint_solid_arrow, 0, NULL);
+  module->arrow = dtgtk_button_new(dtgtk_cairo_paint_arrow, CPF_DIRECTION_RIGHT, NULL);
+  gtk_widget_set_name(module->arrow, "lrp-chevron");
 
   gtk_widget_set_tooltip_text(module->arrow, _("show module"));
   g_signal_connect(G_OBJECT(module->arrow), "button-press-event",
                     G_CALLBACK(_lib_plugin_arrow_button_press), module);
   dt_action_define(&module->actions, NULL, NULL, module->arrow, NULL);
-  gtk_box_pack_start(GTK_BOX(header), module->arrow, FALSE, FALSE, 0);
+  // Tonelark: on the right, after the buttons of the header
+  gtk_box_pack_end(GTK_BOX(header), module->arrow, FALSE, FALSE, 0);
 
   /* add module label */
   GtkWidget *label = gtk_label_new("");

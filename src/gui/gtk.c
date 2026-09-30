@@ -2003,9 +2003,6 @@ static void _init_widgets(dt_gui_gtk_t *gui)
 
   container = widget;
 
-  // Tonelark: the menu bar of Lightroom (File, Edit, Library, Photo, View, Help)
-  gtk_box_pack_start(GTK_BOX(container), dt_lrmenu_new(), FALSE, FALSE, 0);
-
   // Initializing the top border
   gui->widgets.top_border = _init_outer_border(-1, DT_PIXEL_APPLY_DPI(10),
                                                DT_UI_BORDER_TOP);
@@ -3066,12 +3063,16 @@ static void _ui_init_panel_top(dt_ui_t *ui,
                      FALSE, FALSE,
                      DT_UI_PANEL_MODULE_SPACING);
 
-  /* add container for top center */
+  // Tonelark: the menu bar (File, Edit, Library, Photo, View, Help) next to
+  // the logo, in the same bar
+  GtkWidget *menubar = dt_lrmenu_new();
+  gtk_widget_set_valign(menubar, GTK_ALIGN_CENTER);
+  gtk_box_pack_start(GTK_BOX(widget), menubar, FALSE, FALSE, DT_UI_PANEL_MODULE_SPACING);
+
+  /* add container for top center: in the middle of the window (the views) */
   ui->containers[DT_UI_CONTAINER_PANEL_TOP_CENTER] =
     gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_TOP_CENTER],
-                     TRUE, TRUE,
-                     DT_UI_PANEL_MODULE_SPACING);
+  gtk_box_set_center_widget(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_TOP_CENTER]);
 
   /* add container for top right */
   ui->containers[DT_UI_CONTAINER_PANEL_TOP_RIGHT] =

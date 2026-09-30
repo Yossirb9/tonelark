@@ -402,8 +402,14 @@ static void _header_paint(const int tab, const int s)
   const gboolean open = dt_conf_get_bool(key);
   g_free(key);
   GtkWidget *arrow = g_object_get_data(G_OBJECT(h), "arrow");
-  dtgtk_button_set_paint(DTGTK_BUTTON(arrow), dtgtk_cairo_paint_solid_arrow,
-                         open ? CPF_DIRECTION_DOWN : CPF_DIRECTION_RIGHT, NULL);
+  // a chevron on the right, up when the panel is open (the theme rounds the
+  // header of a closed panel all around, of an open one on top)
+  dtgtk_button_set_paint(DTGTK_BUTTON(arrow), dtgtk_cairo_paint_arrow,
+                         open ? CPF_DIRECTION_UP : CPF_DIRECTION_RIGHT, NULL);
+  if(open)
+    dt_gui_add_class(h, "dt_lrp_open");
+  else
+    dt_gui_remove_class(h, "dt_lrp_open");
 }
 
 static gboolean _header_clicked(GtkWidget *w, GdkEventButton *e, gpointer data)
@@ -442,7 +448,8 @@ static GtkWidget *_header(const int tab, const int s)
   dt_gui_add_class(evb, "dt_lrp_menu");
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_name(box, "module-header");
-  GtkWidget *arrow = dtgtk_button_new(dtgtk_cairo_paint_solid_arrow, CPF_DIRECTION_RIGHT, NULL);
+  GtkWidget *arrow = dtgtk_button_new(dtgtk_cairo_paint_arrow, CPF_DIRECTION_RIGHT, NULL);
+  gtk_widget_set_name(arrow, "lrp-chevron");
   gtk_widget_set_can_focus(arrow, FALSE);
   g_signal_connect(arrow, "button-release-event", G_CALLBACK(_header_clicked),
                    GINT_TO_POINTER(tab * 100 + s));
@@ -453,8 +460,8 @@ static GtkWidget *_header(const int tab, const int s)
   GtkWidget *mark = gtk_label_new("");
   gtk_widget_set_name(mark, "lrp-menu-mark");
   gtk_widget_set_tooltip_text(mark, _("edited"));
-  gtk_box_pack_start(GTK_BOX(box), arrow, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(box), arrow, FALSE, FALSE, 0);
   if(tab == 0)
   {
     // the panels show no module headers: their reset is here
@@ -708,9 +715,17 @@ static int _section_update(GtkBox *panel, const int tab, const int s, int pos)
 
   // develop: the controls of the panel, all tools: the modules of the menu
   const gboolean panels = tab == 0;
+  // the last module shown closes the card of the panel (the theme rounds it)
+  dt_iop_module_t *last = NULL;
+  for(const GList *m = modules; m; m = g_list_next(m))
+    if(open && _visible_in_tab(tab, m->data)) last = m->data;
   for(const GList *m = modules; m; m = g_list_next(m))
   {
     dt_iop_module_t *module = m->data;
+    if(module == last)
+      dt_gui_add_class(module->expander, "dt_lrp_last");
+    else
+      dt_gui_remove_class(module->expander, "dt_lrp_last");
     gtk_box_reorder_child(panel, module->expander, pos++);
     // the modules of a panel stay open when it closes, it only hides them
     const gboolean in_tab = _visible_in_tab(tab, module);

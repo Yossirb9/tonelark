@@ -123,6 +123,10 @@ struct _DtBauhausWidget
   GtkBorder margin, padding;
   // gap to add to the top padding due to the vertical centering
   int top_gap;
+  // Tonelark: where the line of a slider is drawn (from the left of its
+  // content), its width (0: not drawn yet), and the name on its row
+  float line_x0, line_w;
+  gboolean one_row;
 
   // goes last, might extend past the end:
   union
@@ -788,6 +792,11 @@ void dt_bauhaus_load_theme()
                                  &bh->color_fill);
   gtk_style_context_lookup_color(ctx, "bauhaus_indicator_border",
                                  &bh->indicator_border);
+  // Tonelark: the box of the value and the knob of the sliders
+  if(!gtk_style_context_lookup_color(ctx, "bauhaus_value_bg", &bh->color_value_bg))
+    bh->color_value_bg = bh->color_bg;
+  if(!gtk_style_context_lookup_color(ctx, "bauhaus_knob", &bh->color_knob))
+    bh->color_knob = (GdkRGBA){ 0.95, 0.95, 0.97, 1.0 };
 
   gtk_style_context_lookup_color(ctx, "graph_bg",
                                  &bh->graph_bg);
@@ -1140,6 +1149,16 @@ static float _widget_width(const dt_bauhaus_widget_t *w)
                    - _widget_get_quad_width(w));
 }
 
+// Tonelark: the position on the line of a slider (0..1 on the line) of a
+// pointer at x in the widget
+static float _slider_pos_of(const dt_bauhaus_widget_t *w, const float x)
+{
+  const float xr = x - w->margin.left - w->padding.left;
+  if(w->type == DT_BAUHAUS_SLIDER && w->line_w > 0.0f)
+    return (xr - w->line_x0) / w->line_w;
+  return xr / _widget_width(w);
+}
+
 gchar *dt_bauhaus_widget_get_tooltip_markup(GtkWidget *widget,
                                             const int x,
                                             const int y)
@@ -1155,10 +1174,10 @@ gchar *dt_bauhaus_widget_get_tooltip_markup(GtkWidget *widget,
     dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
     dt_bauhaus_slider_data_t *d = &w->slider;
 
-    const float pos = (x - w->margin.left - w->padding.left) / _widget_width(w);
+    const float pos = _slider_pos_of(w, x);
 
-    if(y > darktable.bauhaus->line_height / 2.0f + w->margin.top + w->padding.top
-       && pos <= 1.0f)
+    if((w->one_row || y > darktable.bauhaus->line_height / 2.0f + w->margin.top + w->padding.top)
+       && pos >= 0.0f && pos <= 1.0f)
       dt_util_str_cat(&markup, "%s<b>%s</b>", markup ? "\n" : "",
                                dt_bauhaus_slider_get_text(widget, pos * (d->max - d->min) + d->min));
 
@@ -2606,6 +2625,144 @@ static gboolean _popup_draw(GtkWidget *widget,
   return TRUE;
 }
 
+// ---------------------------------------------------------------------------
+// Tonelark: the sliders of Lightroom. A short name, the line and the value in
+// a box on one row, the lines of the rows one under the other; a long name
+// above its line and value. A white round knob on a thin rounded line (a line
+// of colors keeps them, full), the value in a dark rounded box.
+
+static void _tl_rounded_rect(cairo_t *cr, const double x, const double y,
+                             const double w, const double h, double r)
+{
+  r = MIN(r, MIN(w, h) / 2.0);
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, x + w - r, y + r, r, -M_PI / 2.0, 0.0);
+  cairo_arc(cr, x + w - r, y + h - r, r, 0.0, M_PI / 2.0);
+  cairo_arc(cr, x + r, y + h - r, r, M_PI / 2.0, M_PI);
+  cairo_arc(cr, x + r, y + r, r, M_PI, 3.0 * M_PI / 2.0);
+  cairo_close_path(cr);
+}
+
+static void _tl_slider_draw(dt_bauhaus_widget_t *w,
+                            GtkWidget *widget,
+                            GtkStyleContext *context,
+                            cairo_t *cr,
+                            const float w3,
+                            const float h3,
+                            const GdkRGBA *text_color)
+{
+  dt_bauhaus_t *bh = darktable.bauhaus;
+  dt_bauhaus_slider_data_t *d = &w->slider;
+  const float lh = bh->line_height;
+  const gboolean sensitive = gtk_widget_is_sensitive(widget);
+  const gboolean hovered = widget == bh->hovered;
+
+  // the box of the value: as wide as the widest value
+  char *text = dt_bauhaus_slider_get_text(widget, dt_bauhaus_slider_get(widget));
+  char *tmax = dt_bauhaus_slider_get_text(widget, d->max);
+  char *tmin = dt_bauhaus_slider_get_text(widget, d->min);
+  float tw = 0.0f, th = 0.0f, wmax = 0.0f, wmin = 0.0f;
+  _show_pango_text(w, context, cr, text, 0, 0, 0, FALSE, TRUE, PANGO_ELLIPSIZE_NONE, FALSE, FALSE, &tw, &th);
+  _show_pango_text(w, context, cr, tmax, 0, 0, 0, FALSE, TRUE, PANGO_ELLIPSIZE_NONE, FALSE, FALSE, &wmax, &th);
+  _show_pango_text(w, context, cr, tmin, 0, 0, 0, FALSE, TRUE, PANGO_ELLIPSIZE_NONE, FALSE, FALSE, &wmin, &th);
+  g_free(tmax);
+  g_free(tmin);
+  const float pad = INNER_PADDING * 1.5f;
+  // one width for all (the lines end together), wider for a long value
+  const float box_w = MIN(fmaxf(fmaxf(tw, fmaxf(wmax, wmin)) + 2.0f * pad, lh * 3.6f), w3 * 0.4f);
+
+  // the name: on the row when it fits in its column, else above
+  gchar *label = _build_label(w);
+  float lw = 0.0f, lht = 0.0f;
+  if(label && *label && w->show_label)
+    _show_pango_text(w, context, cr, label, 0, 0, 0, FALSE, TRUE, PANGO_ELLIPSIZE_END, FALSE, TRUE, &lw, &lht);
+  const float gap = INNER_PADDING * 2.0f;
+  const float column = w3 * 0.34f;
+  w->one_row = lw + gap <= column && column + box_w + gap < w3 * 0.8f;
+  const float name_w = !w->show_label || lw <= 0.0f ? 0.0f : w->one_row ? column : 0.0f;
+
+  const float knob = lh * (w->one_row ? 0.36f : 0.28f) * (hovered && sensitive ? 1.12f : 1.0f);
+  const float cy = w->one_row ? h3 / 2.0f : lh + (h3 - lh) / 2.0f;
+  const float x0 = name_w + lh * 0.36f;
+  const float x1 = (w->one_row ? w3 - box_w - gap : w3) - lh * 0.36f;
+  const float line_w = MAX(x1 - x0, 10.0f);
+  w->line_x0 = x0;
+  w->line_w = line_w;
+
+  // the name
+  set_color(cr, *text_color);
+  if(name_w > 0.0f || (!w->one_row && lw > 0.0f))
+  {
+    const float ny = w->one_row ? cy - lht / 2.0f : 0.0f;
+    const float max_w = w->one_row ? column - gap : w3 - box_w - gap;
+    _show_pango_text(w, context, cr, label, 0, ny, max_w, FALSE, FALSE, PANGO_ELLIPSIZE_END, FALSE, TRUE,
+                     NULL, NULL);
+  }
+  g_free(label);
+
+  // the line
+  const float thick = fmaxf(2.0f, lh * 0.2f);
+  cairo_pattern_t *gradient = NULL;
+  _tl_rounded_rect(cr, x0 - thick / 2.0f, cy - thick / 2.0f, line_w + thick, thick, thick / 2.0f);
+  if(d->grad_cnt > 0)
+  {
+    const double zoom = (d->max - d->min) / (d->hard_max - d->hard_min);
+    const double offset = (d->min - d->hard_min) / (d->hard_max - d->hard_min);
+    gradient = cairo_pattern_create_linear(x0, 0, x0 + line_w, 0);
+    for(int k = 0; k < d->grad_cnt; k++)
+      cairo_pattern_add_color_stop_rgba(gradient, (d->grad_pos[k] - offset) / zoom, d->grad_col[k][0],
+                                        d->grad_col[k][1], d->grad_col[k][2], sensitive ? 0.95 : 0.35);
+    cairo_set_source(cr, gradient);
+  }
+  else
+    set_color(cr, bh->color_bg);
+  cairo_fill(cr);
+  if(gradient) cairo_pattern_destroy(gradient);
+
+  // from the zero to the value, when the slider says so
+  const float origin = fmaxf(fminf((d->factor > 0 ? -d->min - d->offset / d->factor
+                                                  : d->max + d->offset / d->factor)
+                                   / (d->max - d->min), 1.0f), 0.0f);
+  if(d->fill_feedback && sensitive)
+  {
+    const float a = x0 + origin * line_w, b = x0 + d->pos * line_w;
+    cairo_set_operator(cr, CAIRO_OPERATOR_SCREEN);
+    set_color(cr, bh->color_fill);
+    cairo_rectangle(cr, MIN(a, b), cy - thick / 2.0f, fabsf(b - a), thick);
+    cairo_fill(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+  }
+
+  // the knob
+  if(sensitive)
+  {
+    const float kx = x0 + CLAMP(d->pos, 0.0f, 1.0f) * line_w;
+    cairo_arc(cr, kx, cy + 0.6f, knob, 0.0, 2.0 * M_PI);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.35);
+    cairo_fill(cr);
+    cairo_arc(cr, kx, cy, knob, 0.0, 2.0 * M_PI);
+    set_color(cr, bh->color_knob);
+    cairo_fill(cr);
+  }
+
+  // the value, in its box
+  if(sensitive || text)
+  {
+    const float bh2 = MIN(lh + 4.0f, h3);
+    const float by = w->one_row ? cy - bh2 / 2.0f : 0.0f;
+    _tl_rounded_rect(cr, w3 - box_w + 0.5, by + 0.5, box_w - 1.0, bh2 - 1.0, 5.0);
+    set_color(cr, bh->color_value_bg);
+    cairo_fill_preserve(cr);
+    set_color(cr, bh->color_border);
+    cairo_set_line_width(cr, 1.0);
+    cairo_stroke(cr);
+    set_color(cr, sensitive ? *text_color : bh->color_fg_insensitive);
+    _show_pango_text(w, context, cr, text, w3 - pad, by + (bh2 - th) / 2.0f, box_w - pad, TRUE, FALSE,
+                     PANGO_ELLIPSIZE_END, FALSE, FALSE, NULL, NULL);
+  }
+  g_free(text);
+}
+
 static gboolean _widget_draw(GtkWidget *widget,
                              cairo_t *crf)
 {
@@ -2671,6 +2828,27 @@ static gboolean _widget_draw(GtkWidget *widget,
                        TRUE, TRUE, combo_ellipsis, FALSE, FALSE, &combo_width, &combo_height);
       // we want to center the text vertically
       w->top_gap = floor((h3 - fmaxf(label_height, combo_height)) / 2.0f);
+      // Tonelark: the value of a combobox with a name in a rounded box with its arrow
+      if(label_text && w->show_label && d->text_align == DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT
+         && label_width + combo_width <= w3)
+      {
+        dt_bauhaus_t *bh = darktable.bauhaus;
+        const float pad = INNER_PADDING * 1.5f;
+        const float quad = w->show_quad ? _widget_get_quad_width(w) : 0.0f;
+        const float bw = combo_width + 2.0f * pad + quad;
+        const float bh2 = MIN(combo_height + 5.0f, h3 + w->padding.top + w->padding.bottom);
+        const float by = w->top_gap + (combo_height - bh2) / 2.0f;
+        _tl_rounded_rect(cr, w3 + quad - bw + 0.5, by + 0.5, bw - 1.0, bh2 - 1.0, 6.0);
+        set_color(cr, bh->color_value_bg);
+        cairo_fill_preserve(cr);
+        set_color(cr, bh->color_border);
+        cairo_set_line_width(cr, 1.0);
+        cairo_stroke(cr);
+        set_color(cr, *text_color);
+        // the arrow again, over its box
+        if(w->show_quad) _draw_quad(w, cr, w3, h3);
+        set_color(cr, *text_color);
+      }
       //check if they fit
       if((label_width + combo_width) > w3)
       {
@@ -2720,36 +2898,7 @@ static gboolean _widget_draw(GtkWidget *widget,
     }
     case DT_BAUHAUS_SLIDER:
     {
-      // line for orientation
-      _draw_baseline(w, cr, w3);
-
-      float value_width = 0;
-      if(gtk_widget_is_sensitive(widget))
-      {
-        cairo_save(cr);
-        cairo_rectangle(cr, 0, 0, w3, h3 + INNER_PADDING);
-        cairo_clip(cr);
-        _draw_indicator(w, w->slider.pos, cr, w3, *fg_color, *bg_color);
-        cairo_restore(cr);
-
-        // TODO: merge that text with combo
-
-        char *text = dt_bauhaus_slider_get_text(widget, dt_bauhaus_slider_get(widget));
-        set_color(cr, *text_color);
-        value_width = _show_pango_text(w, context, cr,
-                                       text, w3, 0, 0,
-                                       TRUE, FALSE, PANGO_ELLIPSIZE_END,
-                                       FALSE, FALSE, NULL, NULL);
-        g_free(text);
-      }
-      // label on top of marker:
-      gchar *label_text = _build_label(w);
-      set_color(cr, *text_color);
-      const float label_width = w3 - value_width;
-      if(label_width > 0)
-        _show_pango_text(w, context, cr, label_text, 0, 0, label_width,
-                         FALSE, FALSE, PANGO_ELLIPSIZE_END, FALSE, TRUE, NULL, NULL);
-      g_free(label_text);
+      _tl_slider_draw(w, widget, context, cr, w3, h3, text_color);
     }
     break;
     default:
@@ -2860,9 +3009,8 @@ static void _widget_get_preferred_height(GtkWidget *widget,
                     + darktable.bauhaus->line_height;
   if(w->type == DT_BAUHAUS_SLIDER)
   {
-    // the lower thing to draw is indicator. See _draw_baseline for compute details
-    *minimum_height += INNER_PADDING
-      + darktable.bauhaus->baseline_size + 1.5f * darktable.bauhaus->border_width;
+    // Tonelark: a row with room around the knob (see _tl_slider_draw)
+    *minimum_height += 2.0f * INNER_PADDING + 2.0f;
   }
 
   *natural_height = *minimum_height;
@@ -3552,13 +3700,14 @@ static void _widget_button_press(GtkGestureSingle *gesture,
   }
 
   const float width = _widget_width(w);
-  const float pos = (x - w->margin.left - w->padding.left) / width;
+  const float fpos = (x - w->margin.left - w->padding.left) / width;   // on the whole widget
+  const float pos = _slider_pos_of(w, x);                             // on the line of a slider
 
   const guint button = gtk_gesture_single_get_current_button(gesture);
 
   if(w->quad_paint
      && !passthrough_from_histogram
-     && pos > 1.0f + INNER_PADDING / width)
+     && fpos > 1.0f + INNER_PADDING / width)
   {
     dt_bauhaus_widget_press_quad(widget);
   }
@@ -3591,12 +3740,16 @@ static void _widget_button_press(GtkGestureSingle *gesture,
     d->is_dragging = -1;
     if(!dt_modifier_eq(gesture, 0) || passthrough_from_histogram)
       bh->mouse_x = x;
-    else if(pos <= 1.0f && y > .5 * bh->line_height + w->margin.top + w->padding.top)
+    else if(w->one_row
+            ? pos >= -0.02f && pos <= 1.02f
+            : pos <= 1.0f && y > .5 * bh->line_height + w->margin.top + w->padding.top)
     {
       bh->mouse_x = NAN;
       w->slider.timeout_handle = G_MAXUINT;
-      _slider_set_normalized(w, pos);
+      _slider_set_normalized(w, CLAMP(pos, 0.0f, 1.0f));
     }
+    else if(w->one_row)
+      bh->mouse_x = x;   // on the name or the value: dragging moves it by steps
   }
 
   dt_gui_claim(gesture);
@@ -3636,12 +3789,14 @@ static void _widget_motion(GtkEventControllerMotion *controller,
   dt_bauhaus_t *bh = darktable.bauhaus;
 
   const float width = _widget_width(w);
-  const float pos = (x - w->margin.left - w->padding.left) / width;
+  const float fpos = (x - w->margin.left - w->padding.left) / width;   // on the whole widget
+  const float pos = _slider_pos_of(w, x);                             // on the line of a slider
+  const float line_width = w->type == DT_BAUHAUS_SLIDER && w->line_w > 0.0f ? w->line_w : width;
 
   if(w->type == DT_BAUHAUS_COMBOBOX)
   {
     darktable.control->element =
-      pos > 1.0f && w->quad_paint
+      fpos > 1.0f && w->quad_paint
       ? DT_ACTION_ELEMENT_BUTTON : DT_ACTION_ELEMENT_SELECTION;
   }
   else if(d->is_dragging)
@@ -3649,14 +3804,14 @@ static void _widget_motion(GtkEventControllerMotion *controller,
     if(dt_isnan(bh->mouse_x))
     {
       if(dt_modifier_eq(controller, 0))
-        _slider_set_normalized(w, pos);
+        _slider_set_normalized(w, CLAMP(pos, 0.0f, 1.0f));
       else
         bh->mouse_x = x;
     }
     else
     {
       const float scaled_step =
-        width * dt_bauhaus_slider_get_step(widget) / (d->max - d->min);
+        line_width * dt_bauhaus_slider_get_step(widget) / (d->max - d->min);
       const float steps = floorf((x - bh->mouse_x) / scaled_step);
       GdkEvent *const event = gtk_get_current_event(); // TODO cleanup
       _slider_add_step(widget, copysignf(1, d->factor) * steps,
@@ -3669,9 +3824,9 @@ static void _widget_motion(GtkEventControllerMotion *controller,
   }
   else
   {
-    darktable.control->element = pos > 1.0f && w->quad_paint ? DT_ACTION_ELEMENT_BUTTON
-                               : pos > 0.1f && pos < 0.9f    ? DT_ACTION_ELEMENT_VALUE
-                                                             : DT_ACTION_ELEMENT_FORCE;
+    darktable.control->element = fpos > 1.0f && w->quad_paint ? DT_ACTION_ELEMENT_BUTTON
+                               : pos > 0.1f && pos < 0.9f     ? DT_ACTION_ELEMENT_VALUE
+                                                              : DT_ACTION_ELEMENT_FORCE;
   }
 
   gtk_widget_queue_draw(widget);

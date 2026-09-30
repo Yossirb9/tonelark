@@ -49,7 +49,7 @@ dt_view_type_flags_t views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_TOP_CENTER;
+  return DT_UI_CONTAINER_PANEL_TOP_RIGHT;   // Tonelark: the views are in the middle
 }
 
 gboolean expandable(dt_lib_module_t *self)

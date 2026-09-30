@@ -16,78 +16,82 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* Lightroom Classic inspired theme: charcoal panels, flat headers,
-   thin slider lines with small markers, neutral gray canvas. */
+/* Tonelark theme: dark navy panels in rounded cards, a purple accent,
+   sliders with a white round knob on a thin rounded line and the value in a
+   box (the drawing is in bauhaus.c), like modern photo editors. */
 
 @import url("darktable.css");
 
-/* palette, sampled from Lightroom screenshots */
-@define-color ls_window     #141414;   /* top bar, filmstrip, gaps between panels */
-@define-color ls_panel      #434343;   /* side panels */
-@define-color ls_panel_alt  #1e1e1e;   /* panel headers */
-@define-color ls_line       #2a2a2a;   /* separators, slider tracks */
-@define-color ls_text       #bdbdbd;   /* regular text */
-@define-color ls_text_dim   #929292;   /* secondary text */
-@define-color ls_text_hi    #e6e6e6;   /* active / selected text */
-@define-color ls_canvas     #454545;   /* develop background around the image */
-@define-color ls_grid       #2b2b2b;   /* library grid background */
-@define-color ls_cell       #3d3d3d;   /* library cells */
-@define-color ls_button     #5a5a5a;   /* buttons */
-@define-color ls_accent     #9fb9dc;   /* sparse accent (focus, selection) */
+/* palette */
+@define-color ls_window     #11131a;   /* top bar, filmstrip, gaps between panels */
+@define-color ls_panel      #171a23;   /* side panels, the cards of the modules */
+@define-color ls_panel_alt  #1b1f2a;   /* panel headers */
+@define-color ls_line       #262b38;   /* separators */
+@define-color ls_text       #b7bccb;   /* regular text */
+@define-color ls_text_dim   #7d8396;   /* secondary text */
+@define-color ls_text_hi    #eef0f6;   /* active / selected text */
+@define-color ls_canvas     #0e1016;   /* develop background around the image */
+@define-color ls_grid       #10121a;   /* library grid background */
+@define-color ls_cell       #1a1e28;   /* library cells */
+@define-color ls_button     #20242f;   /* buttons */
+@define-color ls_accent     #8a78ff;   /* the accent: selection, the view and tab shown */
+@define-color ls_accent_bg  #262a45;   /* a selected row */
 
 /* General */
-@define-color selected_bg_color #4a4a4a;
+@define-color selected_bg_color @ls_accent_bg;
 @define-color border_color @ls_line;
 @define-color bg_color @ls_window;
 @define-color fg_color @ls_text;
 @define-color base_color @fg_color;
-@define-color text_color #111111;
+@define-color text_color #0e1016;
 @define-color placeholder_text_color @ls_text_dim;
-@define-color disabled_fg_color #5f5f5f;
+@define-color disabled_fg_color #4f5566;
 
 /* Scroll bars */
-@define-color scroll_bar_inactive #4a4a4a;
-@define-color scroll_bar_active #6a6a6a;
+@define-color scroll_bar_inactive #2c3140;
+@define-color scroll_bar_active #454b5e;
 @define-color scroll_bar_bg @ls_panel;
 
 /* Modules box (plugins) */
 @define-color plugin_bg_color @ls_panel;
-@define-color section_label #c4c4c4;
-@define-color plugin_label_color #cfcfcf;
+@define-color section_label #c9cdd8;
+@define-color plugin_label_color #e3e6ee;
 @define-color collapsible_bg_color @ls_panel_alt;
 
 /* Sliders and comboboxes */
-@define-color bauhaus_bg @ls_line;
-@define-color bauhaus_fill #555555;
-@define-color bauhaus_fg #d2d2d2;
-@define-color bauhaus_border @ls_line;
-@define-color bauhaus_indicator_border #2a2a2a;
-@define-color bauhaus_bg_hover #505050;
+@define-color bauhaus_bg #2d3243;          /* the line of a slider */
+@define-color bauhaus_fill #4a4f6e;        /* from zero to the value */
+@define-color bauhaus_fg #d6d9e2;
+@define-color bauhaus_border #2a2f3e;
+@define-color bauhaus_indicator_border #11131a;
+@define-color bauhaus_bg_hover #232838;
 @define-color bauhaus_fg_hover @ls_text_hi;
 @define-color bauhaus_fg_selected @ls_text_hi;
 @define-color bauhaus_fg_insensitive alpha(@ls_text, 0.4);
+@define-color bauhaus_value_bg #12141c;    /* the box of a value */
+@define-color bauhaus_knob #f4f5f9;        /* the knob of a slider */
 
 /* Buttons and tabs */
 @define-color button_bg @ls_button;
 @define-color button_fg @ls_text;
-@define-color button_border #666666;
-@define-color button_hover_bg #6c6c6c;
+@define-color button_border #2e3444;
+@define-color button_hover_bg #2a2f3e;
 @define-color button_hover_fg @ls_text_hi;
 
 /* Text fields */
-@define-color field_bg #2e2e2e;
+@define-color field_bg #1c2029;
 @define-color field_fg @ls_text_hi;
-@define-color field_active_bg #232323;
+@define-color field_active_bg #161923;
 @define-color field_active_fg @ls_text_hi;
-@define-color field_selected_bg #4a4a4a;
+@define-color field_selected_bg @ls_accent_bg;
 @define-color field_selected_fg #ffffff;
-@define-color field_hover_bg #3c3c3c;
+@define-color field_hover_bg #232838;
 @define-color field_hover_fg @ls_text_hi;
 
 /* Tooltips */
-@define-color tooltip_bg_color #f0f0e6;
-@define-color tooltip_fg_color #1a1a1a;
-@define-color really_dark_bg_color #0e0e0e;
+@define-color tooltip_bg_color #232838;
+@define-color tooltip_fg_color #e6e8ef;
+@define-color really_dark_bg_color #0b0c11;
 @define-color log_fg_color @ls_text_hi;
 
 /* Views */
@@ -99,29 +103,29 @@
 @define-color print_bg_color @ls_grid;
 
 /* Library grid and filmstrip */
-@define-color thumbnail_font_color #9a9a9a;
-@define-color thumbnail_bg_color #4b4b4b;
-@define-color thumbnail_star_bg_color #262626;
+@define-color thumbnail_font_color #8a90a2;
+@define-color thumbnail_bg_color @ls_cell;
+@define-color thumbnail_star_bg_color #11131a;
 @define-color thumbnail_star_hover_color @ls_text_hi;
 @define-color thumbnail_localcopy #eeeeee;
 @define-color thumbnail_fg_color #cfcfcf;
 @define-color thumbnail_bg50_color #eeeeee;
-@define-color thumbnail_selected_bg_color #707070;
-@define-color thumbnail_hover_bg_color #5a5a5a;
+@define-color thumbnail_selected_bg_color #2a2f48;
+@define-color thumbnail_hover_bg_color #232838;
 @define-color thumbnail_hover_fg_color @ls_text_hi;
 @define-color filmstrip_bg_color @ls_window;
-@define-color timeline_bg_color #181818;
+@define-color timeline_bg_color #0f1117;
 @define-color timeline_fg_color @ls_text;
 
 /* Graphs (histogram, curves) */
-@define-color graph_bg #262626;
-@define-color graph_exterior #161616;
-@define-color graph_border #0d0d0d;
-@define-color graph_fg #bdbdbd;
-@define-color graph_fg_active #f2f2f2;
-@define-color graph_grid #2c2c2c;
-@define-color graph_overlay #6a6a6a;
-@define-color inset_histogram alpha(#bdbdbd, 0.45);
+@define-color graph_bg #151821;
+@define-color graph_exterior #11131a;
+@define-color graph_border #0b0c11;
+@define-color graph_fg #b7bccb;
+@define-color graph_fg_active #f2f3f8;
+@define-color graph_grid #242938;
+@define-color graph_overlay #5b6178;
+@define-color inset_histogram alpha(#b7bccb, 0.45);
 
 /* ---------------------------------------------------------------- fonts */
 
@@ -170,7 +174,7 @@ box *,
 #module-header
 {
   background-color: @ls_panel_alt;
-  border-top: 1px solid #3a3a3a;
+  border-top: 1px solid #2a2f3d;
   border-bottom: 1px solid @ls_line;
   padding: 0.35em 0.5em;
 }
@@ -207,7 +211,7 @@ box *,
 
 .dt_section_label
 {
-  border-bottom: 1px solid #3b3b3b;
+  border-bottom: 1px solid #262b38;
 }
 
 /* ------------------------------ Lightroom panels: tabs and menus (lrpanels.c) */
@@ -238,15 +242,15 @@ box *,
 
 .dt_lrp_menu #module-header
 {
-  background-color: #262626;
-  border-top: 1px solid #3a3a3a;
+  background-color: #1b1f2a;
+  border-top: 1px solid #2a2f3d;
   border-bottom: 1px solid @ls_line;
   padding: 0.45em 0.5em;
 }
 
 .dt_lrp_menu:hover #module-header
 {
-  background-color: #2e2e2e;
+  background-color: #232838;
 }
 
 .dt_lrp_menu #lib-panel-label
@@ -266,7 +270,7 @@ box *,
 .dt_lrp_menu_item
 {
   margin-left: 0.9em;
-  border-left: 2px solid #2e2e2e;
+  border-left: 2px solid #232838;
 }
 
 /* the develop panels: the controls of the modules without their headers,
@@ -333,7 +337,7 @@ box *,
 #masking-row-selected
 {
   background-image: none;
-  background-color: #5d6b80;
+  background-color: #3a3f66;
   color: #ffffff;
 }
 
@@ -378,7 +382,7 @@ box *,
 #basicpanel button
 {
   background-color: @ls_button;
-  border: 1px solid #666666;
+  border: 1px solid #2e3444;
   border-radius: 2px;
   padding: 0.1em 0.5em;
   margin: 0 0.1em;
@@ -412,7 +416,7 @@ button,
 tooltip,
 #range-current
 {
-  border: 1px solid #b9b9a8;
+  border: 1px solid #3a4053;
   border-radius: 2px;
 }
 
@@ -430,14 +434,14 @@ tooltip label,
 
 .dt_bauhaus_popup
 {
-  background-color: #262626;
+  background-color: #1b1f2a;
   color: #ececec;
-  border: 1px solid #6a6a6a;
+  border: 1px solid #333a4c;
 }
 
 .dt_bauhaus_popup:hover
 {
-  color: #b9d3f5;
+  color: #c4b8ff;
 }
 
 .dt_bauhaus_popup:selected
@@ -457,12 +461,12 @@ menu,
 context-menu,
 menuitem > arrow
 {
-  background-color: #262626;
+  background-color: #1b1f2a;
 }
 
 menu
 {
-  border: 1px solid #555555;
+  border: 1px solid #333a4c;
 }
 
 menu menuitem,
@@ -478,7 +482,7 @@ menu menuitem
 
 menu menuitem:hover
 {
-  background-color: #3d5a80;
+  background-color: #3a3470;
 }
 
 menu menuitem:hover label
@@ -499,7 +503,7 @@ menu menuitem accelerator
 
 menu separator
 {
-  background-color: #444444;
+  background-color: #2a2f3d;
   min-height: 1px;
   margin: 0.25em 0;
 }
@@ -508,7 +512,7 @@ menu separator
 #tonelark-menubar
 {
   background-color: @ls_window;
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid #1b1f2a;
   padding: 0 0.4em;
 }
 
@@ -524,7 +528,7 @@ menu separator
 
 #tonelark-menubar > menuitem:hover
 {
-  background-color: #333333;
+  background-color: #232838;
 }
 
 #tonelark-menubar > menuitem:hover label
@@ -537,7 +541,7 @@ popover,
 popover *,
 #tag-completion box
 {
-  background-color: #262626;
+  background-color: #1b1f2a;
   color: #ececec;
 }
 
@@ -552,7 +556,7 @@ popover *,
 #panel-buttons button
 {
   background-color: @ls_button;
-  border: 1px solid #6a6a6a;
+  border: 1px solid #333a4c;
   border-radius: 2px;
   color: #e0e0e0;
   padding: 0.25em 0.5em;
@@ -561,7 +565,7 @@ popover *,
 
 #panel-buttons button:hover
 {
-  background-color: #6e6e6e;
+  background-color: #2c3244;
 }
 
 /* "Auto" in the basic panel: a plain text button */
@@ -602,7 +606,7 @@ popover *,
 {
   background-image: none;
   background-color: @ls_button;
-  border: 1px solid #6a6a6a;
+  border: 1px solid #333a4c;
   border-radius: 2px;
   color: #eeeeee;
   padding: 0.3em 0.5em;
@@ -611,7 +615,7 @@ popover *,
 
 #export-start:hover
 {
-  background-color: #6e6e6e;
+  background-color: #2c3244;
 }
 
 #export-start label
@@ -673,7 +677,7 @@ popover *,
 
 #people-tile-shown
 {
-  background-color: #5d6b80;
+  background-color: #3a3f66;
 }
 
 #people-name
@@ -712,7 +716,242 @@ iconview#import-grid
 
 iconview#import-grid:selected
 {
-  background-color: #5d6b80;
+  background-color: #3a3f66;
   color: #ffffff;
   border-radius: 3px;
+}
+
+/* ==========================================================================
+   the look of modern editors: modules in rounded cards, the purple accent on
+   what is shown and selected, rounded buttons, fields and thumbnails
+   ========================================================================== */
+
+/* the view shown (Library | Develop | ...): bright, underlined */
+#view-label
+{
+  color: #6d7385;
+  padding: 0.1em 0.5em 0.25em 0.5em;
+}
+
+#view-label:hover
+{
+  color: #aeb3c2;
+}
+
+#view-label:selected
+{
+  color: #f4f5f9;
+  box-shadow: inset 0 -2px @ls_accent;
+}
+
+/* the tabs Develop | All tools */
+#modules-tabs .dt_lrp_tab:checked
+{
+  border-bottom-color: @ls_accent;
+}
+
+/* the panels of the right (Crop, Basic, Tone Curve...): a card each */
+.dt_lrp_menu
+{
+  margin: 6px 8px 0 8px;
+}
+
+.dt_lrp_menu #module-header
+{
+  background-color: @ls_panel_alt;
+  border: 1px solid @ls_line;
+  border-radius: 10px;
+  padding: 0.6em 0.8em;
+}
+
+.dt_lrp_menu:hover #module-header
+{
+  background-color: #1f2330;
+}
+
+.dt_lrp_menu.dt_lrp_open #module-header
+{
+  border-radius: 10px 10px 0 0;
+  border-bottom-color: transparent;
+}
+
+.dt_lrp_menu #lib-panel-label
+{
+  color: #e9ecf3;
+  font-family: "Segoe UI Semibold", "Segoe UI", sans-serif;
+  font-size: 1.05em;
+}
+
+#lrp-chevron
+{
+  min-width: 0.9em;
+  min-height: 0.9em;
+  color: #9aa0b2;
+}
+
+/* the controls of an open panel: the body of its card */
+#iop-expander.dt_lrp_flat
+{
+  margin: 0 8px;
+  background-color: @ls_panel_alt;
+  border-left: 1px solid @ls_line;
+  border-right: 1px solid @ls_line;
+}
+
+#iop-expander.dt_lrp_flat .dt_plugin_ui,
+#iop-expander.dt_lrp_flat #bauhaus-slider,
+#iop-expander.dt_lrp_flat .dt_plugin_ui #basicpanel
+{
+  background-color: @ls_panel_alt;
+}
+
+#iop-expander.dt_lrp_flat.dt_lrp_last
+{
+  border-bottom: 1px solid @ls_line;
+  border-radius: 0 0 10px 10px;
+  padding-bottom: 0.3em;
+}
+
+/* the modules with a header (All tools), and the utility modules: cards */
+#iop-expander:not(.dt_lrp_flat),
+#lib-expander
+{
+  margin: 4px 8px;
+  border: 1px solid @ls_line;
+  border-radius: 10px;
+  background-color: @ls_panel_alt;
+}
+
+#iop-expander:not(.dt_lrp_flat) #module-header,
+#lib-expander #module-header
+{
+  background-color: transparent;
+  border: none;
+  border-radius: 10px;
+  padding: 0.5em 0.7em;
+}
+
+#iop-expander:not(.dt_lrp_flat) .dt_plugin_ui,
+#iop-expander:not(.dt_lrp_flat) #bauhaus-slider,
+#lib-expander .dt_plugin_ui,
+#lib-expander #bauhaus-slider
+{
+  background-color: @ls_panel_alt;
+  border-radius: 0 0 10px 10px;
+}
+
+#iop-panel-label,
+#lib-panel-label
+{
+  color: #e3e6ee;
+}
+
+/* buttons, rounded */
+button,
+.text-button
+{
+  border-radius: 7px;
+}
+
+#panel-buttons button,
+#basicpanel button,
+#export-start
+{
+  border-radius: 7px;
+  border-color: #2e3444;
+}
+
+#export-start
+{
+  background-color: @ls_accent;
+  border-color: @ls_accent;
+}
+
+#export-start:hover
+{
+  background-color: #9a8bff;
+}
+
+#export-start label
+{
+  color: #ffffff;
+  font-family: "Segoe UI Semibold", "Segoe UI", sans-serif;
+}
+
+/* text fields, rounded */
+entry
+{
+  border-radius: 7px;
+  border: 1px solid #2c3140;
+}
+
+/* the thumbnails: rounded cells, the selected one framed in the accent */
+#thumb-back
+{
+  border-radius: 8px;
+  border: 1px solid @ls_grid;
+}
+
+.dt_act_on_hover #thumb-main:active #thumb-back,
+.dt_act_on_hover #thumb-main:selected #thumb-back,
+.dt_act_on_selection #thumb-main:hover #thumb-back
+{
+  background-color: #252a3d;
+  border: 2px solid @ls_accent;
+}
+
+#thumbtable-filmstrip #thumb-main:active #thumb-back
+{
+  border: 2px solid @ls_accent;
+}
+
+/* the checkboxes and radio buttons in the accent */
+check:checked,
+radio:checked
+{
+  background-color: @ls_accent;
+  border-color: @ls_accent;
+  color: #ffffff;
+}
+
+/* a selected row of a list */
+row:selected,
+treeview:selected
+{
+  background-color: @ls_accent_bg;
+}
+
+/* the scroll bars, thin and round */
+scrollbar slider
+{
+  border-radius: 6px;
+  min-width: 6px;
+}
+
+/* the separators between the views: the underline of the one shown is enough */
+#view-separator
+{
+  color: transparent;
+  padding: 0 0.2em;
+}
+
+/* the top bar: the logo, the menus, the views in the middle, one color with
+   the thin frame of the window above it (it was lighter: a gap) */
+#outer-border,
+#top-hinter
+{
+  background-color: @ls_window;
+}
+
+#tonelark-menubar
+{
+  background-color: transparent;
+  border-bottom: none;
+  padding: 0 0.3em;
+}
+
+#tonelark-menubar > menuitem
+{
+  padding: 0.3em 0.65em;
+  border-radius: 6px;
 }

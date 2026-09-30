@@ -67,7 +67,7 @@ dt_view_type_flags_t views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_TOP_RIGHT;
+  return DT_UI_CONTAINER_PANEL_TOP_CENTER;   // Tonelark: in the middle of the bar
 }
 
 gboolean expandable(dt_lib_module_t *self)
@@ -135,7 +135,7 @@ void gui_init(dt_lib_module_t *self)
     {
       GtkWidget *sep = gtk_label_new("|");
       gtk_widget_set_halign(sep, GTK_ALIGN_START);
-      gtk_widget_set_name(sep, "view-label");
+      gtk_widget_set_name(sep, "view-separator");   // Tonelark: the theme hides it
       gtk_box_pack_start(GTK_BOX(self->widget), sep, FALSE, FALSE, 0);
     }
 
