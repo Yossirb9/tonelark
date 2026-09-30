@@ -11,7 +11,7 @@
 #pragma once
 
 // the Tonelark release, shown with the darktable version it is built on
-#define LIGHTSPEED_VERSION "1.3.2"
+#define LIGHTSPEED_VERSION "1.3.3"
 
 // shown next to the version while Tonelark is in public testing ("" when stable)
 #define LIGHTSPEED_STAGE "beta"
