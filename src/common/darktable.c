@@ -1724,6 +1724,14 @@ int dt_init(int argc,
     }
   }
 
+  // Tonelark: the filmstrip stays where it is when the photo changes (it
+  // moves only to show a photo out of view), once for an older config
+  if(!dt_conf_key_exists("lightspeed/filmstrip_stays"))
+  {
+    dt_conf_set_bool("filmstrip/ui/auto_scroll", FALSE);
+    dt_conf_set_bool("lightspeed/filmstrip_stays", TRUE);
+  }
+
   if(has_workspace)
   {
     // restore dbname & label (as set in call dt_workspace_create) to

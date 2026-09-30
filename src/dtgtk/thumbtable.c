@@ -1178,7 +1178,9 @@ static gboolean _event_scroll(GtkWidget *widget,
     }
     else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
     {
-      _move(table, -(delta_x+delta_y) * (dt_modifier_is(e->state, GDK_SHIFT_MASK)
+      // Tonelark: the wheel down shows the photos before (as Lightroom), a
+      // swipe of the touch pad keeps its direction
+      _move(table, (delta_y - delta_x) * (dt_modifier_is(e->state, GDK_SHIFT_MASK)
                   ? table->view_width - table->thumb_size
                   : table->thumb_size), 0, TRUE);
 
@@ -1400,19 +1402,6 @@ static gboolean _event_enter_notify(GtkWidget *widget,
   return TRUE;
 }
 
-static gboolean _do_select_single(gpointer user_data)
-{
-  dt_thumbtable_t *table = user_data;
-
-  // always keep the edited picture selected
-  dt_selection_clear(darktable.selection);
-  dt_selection_select(darktable.selection, darktable.develop->image_storage.id);
-  dt_selection_select(darktable.selection, table->to_selid);
-  table->sel_single_cb = 0;
-
-  return FALSE;
-}
-
 static gboolean _event_button_press(GtkWidget *widget,
                                     GdkEventButton *event,
                                     dt_thumbtable_t *table)
@@ -1434,6 +1423,10 @@ static gboolean _event_button_press(GtkWidget *widget,
           break;
 
         case DT_THUMBTABLE_MODE_FILMSTRIP:
+          // Tonelark: the first click opened it already, not again
+          if(dt_view_get_current() == DT_VIEW_DARKROOM
+             && id == darktable.develop->image_storage.id)
+            return FALSE;
           if(dt_view_get_current() == DT_VIEW_DARKROOM)
           {
             if(table->sel_single_cb != 0)
@@ -1575,30 +1568,20 @@ static gboolean _event_button_release(GtkWidget *widget,
       if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP
          && cv == DT_VIEW_DARKROOM)
       {
-        // if there is more than one selected image then we have at least
-        // one picture selected not counting the currently edited one.
-        // delay the single selection to ensure that if we double-click we
-        // do not unselect all the pictures.
-        if(table->sel_single_cb == 0)
+        // Tonelark: one click opens the photo, as in Lightroom (ctrl and
+        // shift still add photos to the selection)
+        if(table->to_selid == -1)
+          table->to_selid = NO_IMGID; // the release of a double-click
+        else if(id != darktable.develop->image_storage.id)
         {
-          // button released event must be skip
-          if(table->to_selid == -1)
+          if(table->sel_single_cb != 0)
           {
-            table->to_selid = NO_IMGID;
+            g_source_remove(table->sel_single_cb);
+            table->sel_single_cb = 0;
           }
-          else
-          {
-            GtkSettings *settings = gtk_widget_get_settings(GTK_WIDGET (widget));
-            guint double_click_time = 400;
-
-            if(settings)
-            {
-              g_object_get(settings, "gtk-double-click-time", &double_click_time, NULL);
-            }
-
-            table->to_selid = id;
-            table->sel_single_cb = g_timeout_add(double_click_time, _do_select_single, table);
-          }
+          dt_selection_deselect(darktable.selection, darktable.develop->image_storage.id);
+          dt_selection_select(darktable.selection, id);
+          DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, id);
         }
       }
       else
