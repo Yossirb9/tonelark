@@ -509,7 +509,7 @@ void gui_init(dt_lib_module_t *self)
 
     if(i == DT_LSB_TEMP)
     {
-      dt_bauhaus_slider_set_format(w, " K");
+      // no unit, like Lightroom: a narrow box for the value
       dt_bauhaus_slider_set_digits(w, 0);
       dt_bauhaus_slider_set_log_curve(w);
       dt_bauhaus_slider_set_stop(w, 0.0f, 0.25f, 0.45f, 1.0f);
@@ -522,8 +522,6 @@ void gui_init(dt_lib_module_t *self)
       dt_bauhaus_slider_set_stop(w, 0.5f, 0.85f, 0.85f, 0.85f);
       dt_bauhaus_slider_set_stop(w, 1.0f, 0.9f, 0.3f, 0.9f);
     }
-    else if(i == DT_LSB_EXPOSURE)
-      dt_bauhaus_slider_set_format(w, " EV");
 
     g_signal_connect(G_OBJECT(w), "value-changed", G_CALLBACK(_slider_changed), self);
     d->slider[i] = w;

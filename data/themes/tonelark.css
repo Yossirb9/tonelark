@@ -357,7 +357,7 @@ box *,
 
 #basicpanel
 {
-  padding: 0.3em 0.9em 0.6em 0.9em;
+  padding: 0.3em 0.45em 0.6em 0.6em;
 }
 
 #basicpanel-section
@@ -954,4 +954,10 @@ scrollbar slider
 {
   padding: 0.3em 0.65em;
   border-radius: 6px;
+}
+
+/* the controls of a module: little room on the right, the lines long */
+.dt_plugin_ui_main
+{
+  padding: 0.28em 0.45em 0.28em 0.6em;
 }

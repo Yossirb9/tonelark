@@ -182,7 +182,9 @@ static void _request_focus(dt_bauhaus_widget_t *w)
 
 static float _widget_get_quad_width(const dt_bauhaus_widget_t *w)
 {
-  if(w->show_quad)
+  // Tonelark: a slider with no icon keeps no room for one (its value box
+  // goes to the edge); a combobox keeps it for its arrow
+  if(w->show_quad && (w->quad_paint || w->type != DT_BAUHAUS_SLIDER))
     return darktable.bauhaus->quad_width + INNER_PADDING * 4;
   else
     return .0f;
@@ -2667,9 +2669,9 @@ static void _tl_slider_draw(dt_bauhaus_widget_t *w,
   _show_pango_text(w, context, cr, tmin, 0, 0, 0, FALSE, TRUE, PANGO_ELLIPSIZE_NONE, FALSE, FALSE, &wmin, &th);
   g_free(tmax);
   g_free(tmin);
-  const float pad = INNER_PADDING * 1.5f;
-  // one width for all (the lines end together), wider for a long value
-  const float box_w = MIN(fmaxf(fmaxf(tw, fmaxf(wmax, wmin)) + 2.0f * pad, lh * 3.6f), w3 * 0.4f);
+  const float pad = INNER_PADDING;
+  // narrow, one width for all (the lines end together), wider for a long value
+  const float box_w = MIN(fmaxf(fmaxf(tw, fmaxf(wmax, wmin)) + 2.0f * pad, lh * 2.6f), w3 * 0.35f);
 
   // the name: on the row when it fits in its column, else above
   gchar *label = _build_label(w);
@@ -2677,14 +2679,14 @@ static void _tl_slider_draw(dt_bauhaus_widget_t *w,
   if(label && *label && w->show_label)
     _show_pango_text(w, context, cr, label, 0, 0, 0, FALSE, TRUE, PANGO_ELLIPSIZE_END, FALSE, TRUE, &lw, &lht);
   const float gap = INNER_PADDING * 2.0f;
-  const float column = w3 * 0.34f;
+  const float column = w3 * 0.30f;
   w->one_row = lw + gap <= column && column + box_w + gap < w3 * 0.8f;
   const float name_w = !w->show_label || lw <= 0.0f ? 0.0f : w->one_row ? column : 0.0f;
 
   const float knob = lh * (w->one_row ? 0.36f : 0.28f) * (hovered && sensitive ? 1.12f : 1.0f);
   const float cy = w->one_row ? h3 / 2.0f : lh + (h3 - lh) / 2.0f;
   const float x0 = name_w + lh * 0.36f;
-  const float x1 = (w->one_row ? w3 - box_w - gap : w3) - lh * 0.36f;
+  const float x1 = (w->one_row ? w3 - box_w - INNER_PADDING : w3) - lh * 0.36f;
   const float line_w = MAX(x1 - x0, 10.0f);
   w->line_x0 = x0;
   w->line_w = line_w;
@@ -2757,7 +2759,9 @@ static void _tl_slider_draw(dt_bauhaus_widget_t *w,
     cairo_set_line_width(cr, 1.0);
     cairo_stroke(cr);
     set_color(cr, sensitive ? *text_color : bh->color_fg_insensitive);
-    _show_pango_text(w, context, cr, text, w3 - pad, by + (bh2 - th) / 2.0f, box_w - pad, TRUE, FALSE,
+    // in the middle of its box
+    const float tx = w3 - box_w / 2.0f + fminf(tw, box_w - 2.0f * pad) / 2.0f;
+    _show_pango_text(w, context, cr, text, tx, by + (bh2 - th) / 2.0f, box_w - 2.0f * pad, TRUE, FALSE,
                      PANGO_ELLIPSIZE_END, FALSE, FALSE, NULL, NULL);
   }
   g_free(text);
