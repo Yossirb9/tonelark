@@ -224,13 +224,20 @@ end:
 }
 #undef _ERROR
 
+// Tonelark: one reader at a time. A reader refs the objects of the tree, and
+// the ref counts of json-glib are not atomic: the develop view opening a photo
+// while a thumbnail or an export of the AI loads the same module freed the
+// root of the tree (a crash in json_reader_read_member)
+static GMutex _matching_lock;
+
 GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 {
   JsonParser *parser = darktable.noiseprofile_parser;
   JsonReader *reader = NULL;
   GList *result = NULL;
 
-  if(!parser) goto end;
+  if(!parser) return NULL;
+  g_mutex_lock(&_matching_lock);
 
   dt_print(DT_DEBUG_CONTROL | DT_DEBUG_VERBOSE, "[noiseprofile] looking for maker `%s', model `%s'", cimg->camera_maker, cimg->camera_model);
 
@@ -359,6 +366,7 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 
 end:
   if(reader) g_object_unref(reader);
+  g_mutex_unlock(&_matching_lock);
   if(result) result = g_list_sort(result, _sort_by_iso);
   return result;
 }
