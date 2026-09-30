@@ -63,6 +63,7 @@ typedef struct dt_lib_export_t
   uint32_t max_allowed_width , max_allowed_height;
   GtkWidget *upscale, *profile, *intent, *style, *style_mode;
   dt_gui_collapsible_section_t cs;
+  dt_gui_collapsible_section_t cs_more;   // Tonelark: the options few exports need
   GtkWidget *batch_treeview;
   GtkButton *export_button, *batch_export_button;
   GtkWidget *storage_extra_container, *format_extra_container;
@@ -224,6 +225,14 @@ void gui_update(dt_lib_module_t *self)
                            && format_index != -1
                            && storage_index != -1
                            && export_enabled);
+
+  // Tonelark: the button says how many photos go out
+  const int n = dt_act_on_get_images_nb(TRUE, FALSE);
+  gchar *label = n > 0 ? g_strdup_printf(ngettext("Export %d photo", "Export %d photos", n), n)
+                       : g_strdup(_("Export"));
+  gtk_button_set_label(d->export_button, label);
+  g_free(label);
+  dt_gui_update_collapsible_section(&d->cs_more);
 }
 
 static void _image_selection_changed_callback(gpointer instance,
@@ -1440,7 +1449,7 @@ void gui_init(dt_lib_module_t *self)
   dt_action_insert_sorted(DT_ACTION(self), &darktable.control->actions_storage);
 
   d->storage = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-  dt_bauhaus_widget_set_label(d->storage, NULL, N_("target storage"));
+  dt_bauhaus_widget_set_label(d->storage, NULL, N_("export to"));
 
   // add all storage widgets to the stack widget
   d->storage_extra_container = gtk_stack_new();
@@ -1487,14 +1496,16 @@ void gui_init(dt_lib_module_t *self)
     }
   }
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(d->dimensions_type, self, NULL, N_("set size"),
-                               _("choose a method for setting the output size"),
+  // Tonelark: in words; the photos fit in width x height, 0 is no limit
+  DT_BAUHAUS_COMBOBOX_NEW_FULL(d->dimensions_type, self, NULL, N_("size"),
+                               _("how the size of the exported photos is set\n"
+                                 "width x height in pixels: the photos fit in it, 0 x 0 is the full size"),
                                dt_conf_get_int(CONFIG_PREFIX "dimensions_type"),
                                _dimensions_type_changed, d,
-                               N_("in pixels (for file)"),
-                               N_("in cm (for print)"),
-                               N_("in inch (for print)"),
-                               N_("by scale (for file)"));
+                               N_("fit in width x height (pixels)"),
+                               N_("print size (cm)"),
+                               N_("print size (inch)"),
+                               N_("scale of the full size"));
 
   d->print_width = dt_action_entry_new(DT_ACTION(self),
                                        N_("print width"),
@@ -1680,21 +1691,35 @@ void gui_init(dt_lib_module_t *self)
   d->export_button = GTK_BUTTON(dt_action_button_new
                                 (self, NC_("actionbutton", "start export"),
                                  _export_button_clicked, self,
-                                 NULL,
+                                 _("export the selected photos with these settings (Ctrl+E)"),
                                  GDK_KEY_e, GDK_CONTROL_MASK));
   gtk_widget_set_name(GTK_WIDGET(d->export_button), "export-start");
 
+  // Tonelark: where, the file, the size, and the button; the options that
+  // few exports need are in a closed section, like in the export dialog of
+  // Lightroom
+  GtkWidget *size_hint = gtk_label_new(_("0 x 0 = the full size of the photo"));
+  gtk_widget_set_name(size_hint, "export-hint");
+  gtk_label_set_xalign(GTK_LABEL(size_hint), 0.0f);
+  g_object_bind_property(d->px_size, "visible", size_hint, "visible", G_BINDING_SYNC_CREATE);
+
+  GtkWidget *more = dt_gui_vbox();
+  dt_gui_new_collapsible_section(&d->cs_more, "plugins/lighttable/export/more_expanded",
+                                 _("more options"), GTK_BOX(more), DT_ACTION(self));
+  gtk_widget_set_tooltip_text(d->cs_more.expander,
+                              _("color profile, rendering intent, a style, upscaling and masks"));
+  dt_gui_box_add(d->cs_more.container, d->upscale, d->high_quality, d->export_masks,
+                 d->profile, d->intent, style_box, d->style_mode);
+
   self->widget = dt_gui_vbox
-    (dt_ui_section_label_new(C_("section", "storage options")),
+    (dt_ui_section_label_new(C_("section", "export to")),
      d->storage, d->storage_extra_container,
-     dt_ui_section_label_new(C_("section", "format options")),
+     dt_ui_section_label_new(C_("section", "file")),
      d->format, d->format_extra_container,
-     dt_ui_section_label_new(C_("section", "global options")),
-     d->dimensions_type, d->px_size, d->print_size, d->scale, d->size_in_px,
-     d->upscale, d->high_quality, d->export_masks,
-     d->profile, d->intent,
-     style_box, d->style_mode,
-     d->export_button);
+     dt_ui_section_label_new(C_("section", "size")),
+     d->dimensions_type, d->px_size, size_hint, d->print_size, d->scale, d->size_in_px,
+     d->export_button,
+     more);
 
   // multi-preset export
   dt_gui_new_collapsible_section(&d->cs,

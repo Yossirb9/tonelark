@@ -157,6 +157,7 @@ FILE(GLOB SOURCE_FILES
   "gui/workspace.c"
   "gui/gtk.c"
   "gui/gtkentry.c"
+  "gui/lrmenu.c"
   "gui/lrpanels.c"
   "gui/guides.c"
   "gui/hist_dialog.c"

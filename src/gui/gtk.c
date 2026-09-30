@@ -46,6 +46,7 @@
 #include "gui/presets.h"
 #include "views/view.h"
 #include "gui/about.h"
+#include "gui/lrmenu.h"
 #include "gui/preferences.h"
 
 #include <gdk/gdkkeysyms.h>
@@ -2001,6 +2002,9 @@ static void _init_widgets(dt_gui_gtk_t *gui)
                             _ui_widget_redraw_callback, gui->ui->main_window);
 
   container = widget;
+
+  // Tonelark: the menu bar of Lightroom (File, Edit, Library, Photo, View, Help)
+  gtk_box_pack_start(GTK_BOX(container), dt_lrmenu_new(), FALSE, FALSE, 0);
 
   // Initializing the top border
   gui->widgets.top_border = _init_outer_border(-1, DT_PIXEL_APPLY_DPI(10),

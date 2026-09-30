@@ -422,6 +422,125 @@ tooltip label,
   color: @tooltip_fg_color;
 }
 
+/* ------------------------------------------------ dropdown lists (bauhaus)
+
+   darktable draws them on the tooltip color: on the light tooltips of this
+   theme their light gray items looked disabled. Dark like the panels, bright
+   items, the one under the mouse in the accent color. */
+
+.dt_bauhaus_popup
+{
+  background-color: #262626;
+  color: #ececec;
+  border: 1px solid #6a6a6a;
+}
+
+.dt_bauhaus_popup:hover
+{
+  color: #b9d3f5;
+}
+
+.dt_bauhaus_popup:selected
+{
+  color: #ffffff;
+}
+
+.dt_bauhaus_popup:disabled   /* the titles of groups of choices */
+{
+  color: @ls_text_dim;
+}
+
+/* the menus (the menu bar, right click, presets) were on the tooltip color
+   too: dark, bright items, the one under the mouse in blue */
+menu,
+.popup,
+context-menu,
+menuitem > arrow
+{
+  background-color: #262626;
+}
+
+menu
+{
+  border: 1px solid #555555;
+}
+
+menu menuitem,
+menu menuitem label
+{
+  color: #ececec;
+}
+
+menu menuitem
+{
+  padding: 0.3em 1.2em 0.3em 0.9em;
+}
+
+menu menuitem:hover
+{
+  background-color: #3d5a80;
+}
+
+menu menuitem:hover label
+{
+  color: #ffffff;
+}
+
+menu menuitem:disabled label
+{
+  color: #6f6f6f;
+}
+
+menu menuitem accelerator
+{
+  color: #9a9a9a;
+  margin-left: 2em;
+}
+
+menu separator
+{
+  background-color: #444444;
+  min-height: 1px;
+  margin: 0.25em 0;
+}
+
+/* the menu bar at the top: File, Edit, Library, Photo, View, Help */
+#tonelark-menubar
+{
+  background-color: @ls_window;
+  border-bottom: 1px solid #262626;
+  padding: 0 0.4em;
+}
+
+#tonelark-menubar > menuitem
+{
+  padding: 0.2em 0.75em;
+}
+
+#tonelark-menubar > menuitem label
+{
+  color: @ls_text;
+}
+
+#tonelark-menubar > menuitem:hover
+{
+  background-color: #333333;
+}
+
+#tonelark-menubar > menuitem:hover label
+{
+  color: @ls_text_hi;
+}
+
+/* the popovers (keyword completion, the slider entry) on the same color */
+popover,
+popover *,
+#tag-completion box
+{
+  background-color: #262626;
+  color: #ececec;
+}
+
 /* ------------------------------------ Lightroom panel bottom buttons */
 
 #panel-buttons
@@ -498,6 +617,14 @@ tooltip label,
 #export-start label
 {
   color: #eeeeee;
+}
+
+/* under the size: what 0 x 0 means */
+#export-hint
+{
+  color: @ls_text_dim;
+  font-size: 0.82em;
+  margin: 0 0 0.2em 0;
 }
 
 /* AI culling: the ratings list, the reason of each score under its photo */

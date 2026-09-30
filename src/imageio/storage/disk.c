@@ -293,7 +293,15 @@ void gui_init(dt_imageio_module_storage_t *self)
                                N_("overwrite if changed"),
                                N_("skip"));
 
-  self->widget = dt_gui_vbox(dt_gui_hbox(d->entry, widget), d->onsave_action);
+  // Tonelark: what the path says
+  GtkWidget *hint = gtk_label_new(_("the folder, then the name of the file: $(FILE_NAME) is the name "
+                                    "of the photo. The folder icon chooses the folder."));
+  gtk_widget_set_name(hint, "export-hint");
+  gtk_label_set_xalign(GTK_LABEL(hint), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(hint), 20);
+
+  self->widget = dt_gui_vbox(dt_gui_hbox(d->entry, widget), hint, d->onsave_action);
 }
 
 void gui_cleanup(dt_imageio_module_storage_t *self)
