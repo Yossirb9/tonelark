@@ -97,6 +97,7 @@ typedef struct _job_t
   JsonObject *result;
   gchar *error;
   dt_imgid_t made;
+  GHashTable *twins;          // rate: the photo rated -> the other files of that shot
 } _job_t;
 
 const char *name(dt_lib_module_t *self)
@@ -129,7 +130,64 @@ static void _job_free(void *data)
   g_free(j->language);
   g_free(j->error);
   if(j->result) json_object_unref(j->result);
+  if(j->twins) g_hash_table_destroy(j->twins);
   g_free(j);
+}
+
+// RAW+JPEG: one shot in two files. Rated apart, the same photo had two scores
+// and two reasons, and the second one was a "near duplicate" to delete. The
+// shot is rated once, on its raw file, and the other files get its result.
+static GList *_one_per_shot(GList *imgs, GHashTable *twins)
+{
+  GHashTable *shot = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  // the raw files first: they stand for their shot
+  for(int raw = 1; raw >= 0; raw--)
+    for(GList *l = imgs; l; l = g_list_next(l))
+    {
+      const dt_imgid_t id = GPOINTER_TO_INT(l->data);
+      const dt_image_t *img = dt_image_cache_get(id, 'r');
+      if(!img) continue;
+      const gboolean is_raw = dt_image_is_raw(img);
+      gchar *stem = g_ascii_strdown(img->filename, -1);
+      char *dot = strrchr(stem, '.');
+      if(dot) *dot = '\0';
+      gchar *key = g_strdup_printf("%d/%s", img->film_id, stem);
+      dt_image_cache_read_release(img);
+      g_free(stem);
+      if(is_raw != raw)
+      {
+        g_free(key);
+        continue;
+      }
+      gpointer first = g_hash_table_lookup(shot, key);
+      if(!first)
+        g_hash_table_insert(shot, key, GINT_TO_POINTER(id));
+      else
+      {
+        GList *others = g_hash_table_lookup(twins, first);
+        g_hash_table_steal(twins, first);
+        g_hash_table_insert(twins, first, g_list_append(others, GINT_TO_POINTER(id)));
+        g_free(key);
+      }
+    }
+  // in the order of the photos (the bursts of a sheet follow each other)
+  GHashTable *second = g_hash_table_new(g_direct_hash, g_direct_equal);
+  GHashTableIter it;
+  gpointer k, v;
+  g_hash_table_iter_init(&it, twins);
+  while(g_hash_table_iter_next(&it, &k, &v))
+    for(GList *l = v; l; l = g_list_next(l)) g_hash_table_add(second, l->data);
+  GList *out = NULL;
+  for(GList *l = imgs; l; l = g_list_next(l))
+    if(!g_hash_table_contains(second, l->data)) out = g_list_prepend(out, l->data);
+  g_hash_table_destroy(second);
+  g_hash_table_destroy(shot);
+  return g_list_reverse(out);
+}
+
+static void _twins_free(gpointer data)
+{
+  g_list_free(data);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,11 +623,20 @@ static gchar *_rate_note(const char *who, const double score, const char *criter
 static void _apply_rate(_job_t *j)
 {
   JsonArray *arr = json_object_get_array_member(j->result, "images");
-  const int n = arr ? json_array_get_length(arr) : 0;
-  _result_t *res = g_new0(_result_t, MAX(1, n));
+  int n = arr ? json_array_get_length(arr) : 0;
   const char *who = json_object_get_string_member_with_default(j->result, "provider", "AI");
   const char *request = j->criteria ? j->criteria : "";
   int picks = 0, matches = 0, trash = 0;
+
+  // with the other files of each shot rated (RAW+JPEG)
+  int total = n;
+  for(int k = 0; k < n; k++)
+  {
+    const dt_imgid_t id = json_object_get_int_member(json_array_get_object_element(arr, k), "id");
+    total += j->twins ? g_list_length(g_hash_table_lookup(j->twins, GINT_TO_POINTER(id))) : 0;
+  }
+  _result_t *res = g_new0(_result_t, MAX(1, total));
+  int t = n;
 
   for(int k = 0; k < n; k++)
   {
@@ -589,9 +656,23 @@ static void _apply_rate(_job_t *j)
     picks += r->picked;
     matches += r->matched;
     trash += r->trash;
+    for(GList *l = j->twins ? g_hash_table_lookup(j->twins, GINT_TO_POINTER(r->id)) : NULL; l; l = g_list_next(l))
+    {
+      _result_t *c = &res[t++];
+      *c = *r;
+      c->id = GPOINTER_TO_INT(l->data);
+      if(!j->stars) c->stars = dt_ratings_get(c->id);
+      if(!c->picked && j->reject) c->stars = DT_VIEW_REJECT;
+      c->reason = g_strdup(r->reason);
+      c->note = g_strdup(r->note);
+      picks += c->picked;
+      matches += c->matched;
+      trash += c->trash;
+    }
   }
-  if(n) _store(KIND_AI, request, res, n);
-  _results_free(res, n);
+  if(t) _store(KIND_AI, request, res, t);
+  _results_free(res, t);
+  n = t;
 
   JsonArray *errors = json_object_get_array_member(j->result, "errors");
   const int nerr = errors ? json_array_get_length(errors) : 0;
@@ -970,10 +1051,20 @@ static gboolean _job_done(gpointer data)
   else
   {
     const int n = json_object_get_int_member(j->result, "replaced");
-    gchar *msg = n > 0
+    int kept = 0;
+    JsonArray *faces = json_object_get_array_member(j->result, "faces");
+    for(guint k = 0; faces && k < json_array_get_length(faces); k++)
+      kept += *json_object_get_string_member_with_default(json_array_get_object_element(faces, k), "kept", "") != 0;
+    gchar *done = n > 0
       ? g_strdup_printf(ngettext("Best Take: %d face replaced, the new photo is on top of the burst group",
                                  "Best Take: %d faces replaced, the new photo is on top of the burst group", n), n)
-      : g_strdup(_("Best Take: every face is already at its best in one photo, it is on top of the burst group"));
+      : g_strdup(_("Best Take: the best photo already has everyone at their best, it is on top of the burst group"));
+    gchar *msg = kept
+      ? g_strdup_printf(ngettext("%s. %d better face was left out: the person moved between the photos",
+                                 "%s. %d better faces were left out: the people moved between the photos", kept),
+                        done, kept)
+      : g_strdup(done);
+    g_free(done);
     _set_status(j->self, msg);
     dt_control_log("%s", msg);
     g_free(msg);
@@ -1088,6 +1179,11 @@ static int32_t _run_job(dt_job_t *job)
       g_free(path);
     }
     json_object_set_array_member(req, "frames", frames);
+    if(j->provider)
+    {
+      json_object_set_string_member(req, "provider", j->provider);
+      json_object_set_string_member(req, "model", j->model ? j->model : "");
+    }
 
     // next to the first photo: <name>_besttake.tif
     const dt_imgid_t first = GPOINTER_TO_INT(j->imgs->data);
@@ -1122,7 +1218,18 @@ static int32_t _run_job(dt_job_t *job)
   }
   else
   {
-    JsonArray *images = _previews(j, job, dir, j->task == TASK_CULL ? 1600 : 900);
+    GList *all = j->imgs;
+    if(j->task == TASK_RATE)
+    {
+      j->twins = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _twins_free);
+      j->imgs = _one_per_shot(all, j->twins);
+    }
+    JsonArray *images = _previews(j, job, dir, j->task == TASK_CULL ? 1600 : 1000);
+    if(j->imgs != all)
+    {
+      g_list_free(j->imgs);
+      j->imgs = all;
+    }
     if(j->task == TASK_RATE)
     {
       json_object_set_array_member(req, "bursts", _time_bursts(images));
@@ -1130,7 +1237,7 @@ static int32_t _run_job(dt_job_t *job)
       json_object_set_string_member(req, "model", j->model ? j->model : "");
       json_object_set_string_member(req, "criteria", j->criteria ? j->criteria : "");
       json_object_set_string_member(req, "language", j->language ? j->language : "English");
-      json_object_set_int_member(req, "per_sheet", 12);
+      json_object_set_int_member(req, "per_sheet", 6);
     }
     json_object_set_array_member(req, "images", images);
     j->result = dt_lsai_run(j->task == TASK_CULL ? "cull" : "rate", req, job, &error);
@@ -1173,6 +1280,18 @@ static void _start(dt_lib_module_t *self, const _task_t task)
   dt_conf_set_bool("plugins/lighttable/aicull/stars", j->stars);
   dt_conf_set_bool("plugins/lighttable/aicull/stack", j->stack);
 
+  if(task == TASK_BESTTAKE)
+  {
+    // the AI chooses the best faces when one is connected, else the measures
+    gchar *why = NULL;
+    if(!dt_lsai_provider_ui_get(d->provider, &j->provider, &j->model, &why))
+    {
+      g_free(j->provider);
+      g_free(j->model);
+      j->provider = j->model = NULL;
+    }
+    g_free(why);
+  }
   if(task == TASK_RATE)
   {
     gchar *why = NULL;

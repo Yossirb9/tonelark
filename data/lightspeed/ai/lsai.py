@@ -655,16 +655,26 @@ def make_sheet(paths, out, cols=4, cell=520, labels=None):
     return out
 
 
-RATE_PROMPT = """The image {sheet} is a contact sheet of {n} photos, each marked with a yellow number (1 to {n}).
+# the model tells what it sees in each photo before it rates it: without that
+# it gave a photo the details of its neighbour on the sheet ("a raised hand"
+# on a girl standing with her hands down). The scale is absolute: asked to
+# spread the scores on every sheet, it gave good photos 6 and deleted a third.
+RATE_PROMPT = """The image {sheet} is a contact sheet of {n} photos, each marked with a yellow number (1 to {n}) in the top left corner of its cell.
 {task}
-Most of them are raw files as the camera took them, before any editing: rate what each photo can become after a normal edit, not how it looks now. Exposure, dark faces, white balance, colors, contrast, flat light, noise and the crop are easy to fix in the editor: they do not lower the score (name them in the reason as what to fix). The score goes down only for what editing cannot fix: focus and motion blur, closed eyes, the expression and the moment, a cut-off or hidden subject, highlights blown beyond recovery.
-The scores: 9-10 outstanding, 7-8 good, 5-6 usable with clear flaws, 3-4 weak, 1-2 unusable (out of focus, eyes closed).
-Compare the photos with each other and use the whole scale: do not give most photos about the same score, the best photos get clearly higher scores than the others.
-{bursts}"keep" is true only for the photos worth keeping and editing{keep_for}.
-"delete" is true for a candidate for deletion: a photo that no edit can save (out of focus, motion blur, eyes closed, an accidental shot, the subject cut off) or a near duplicate clearly worse than another photo of the same moment. It is about the photo alone, never about the request: a good photo that does not answer the request is not deleted.
+Look at each photo alone, in its own cell. First write in "see" what is in that photo: who, what they do, where they look, their hands. Then score it. The reason may only talk about what you wrote in "see" for that photo.
+Most of them are raw files as the camera took them, before any editing: rate what each photo can become after a normal edit, not how it looks now. Exposure, dark faces, white balance, colors, contrast, flat light, noise and the crop are easy to fix in the editor: they do not lower the score (name them in the reason as what to fix). The score goes down only for what editing cannot fix: the main subject out of focus, motion blur, closed eyes, a poor expression or a missed moment, a cut-off or hidden subject, highlights blown beyond recovery.
+The scale, the same for every sheet (a sheet may have only good photos, or only weak ones):
+9-10: outstanding, a photo for the album cover or the portfolio.
+8: a very good photo: sharp on the subject, a real expression or moment, good composition. Most keepers of a good shoot are 7-8.
+7: a good photo with a small flaw.
+5-6: usable but ordinary, or with a flaw that editing cannot fix.
+3-4: weak.
+1-2: unusable (out of focus, eyes closed, an accidental shot).
+{bursts}"keep" is true for the photos worth keeping and editing{keep_for}.
+"delete" is true only for a photo that no edit can save: the main subject clearly out of focus, motion blur, eyes closed, an accidental shot, the subject cut off; or, in a burst of the same moment, a frame clearly worse than another frame of that burst (eyes closed or blur where the other is fine). A frame about as good as another frame of the moment is not deleted. It is about the photo alone, never about the request: a good photo that does not answer the request is not deleted.
 "reason" explains the score in {language}, in one or two short sentences (at most 30 words): what is good, what lowered the score{reason_for}, and what to fix in the edit if anything. The user reads it next to that photo alone: write about that photo, without mentioning the other photos or their numbers.
 Answer with JSON only, no other text:
-{{"photos":[{{"n":1,"score":7.5,"keep":true,"delete":false,{match}"reason":"..."}}]}}"""
+{{"photos":[{{"n":1,"see":"...","score":8,"keep":true,"delete":false,{match}"reason":"..."}}]}}"""
 
 RATE_TASK = ("Act as a professional photo editor culling the shoot. Rate every photo from 1 to 10 for its "
              "potential: the subject in focus, no motion blur, open eyes and a good expression, the moment, "
@@ -680,7 +690,7 @@ RATE_TASK_FOR = ('The user is looking for: "{criteria}". Act as a professional p
 def cmd_rate(req):
     images = req['images']
     provider = req.get('provider', 'claude')
-    per = int(req.get('per_sheet', 12))
+    per = int(req.get('per_sheet', 6))
     criteria = (req.get('criteria') or '').strip()
     language = (req.get('language') or 'English').strip()
     work = tempfile.mkdtemp(prefix='lsai_rate_')
@@ -691,12 +701,15 @@ def cmd_rate(req):
     def one_sheet(s):
         chunk = sheets[s]
         name = 'sheet_%d.jpg' % (s + 1)
-        make_sheet([im['path'] for im in chunk], os.path.join(work, name))
+        # 6 photos in 3 columns: each twice the size it had with 12 in 4
+        make_sheet([im['path'] for im in chunk], os.path.join(work, name), cols=3 if len(chunk) > 4 else 2,
+                   cell=720)
         groups = {}
         for k, im in enumerate(chunk):
             if im['id'] in burst_of:
                 groups.setdefault(burst_of[im['id']], []).append(k + 1)
-        btext = ''.join('Photos %s are a burst of the same moment: give the best of them the highest score.\n'
+        btext = ''.join('Photos %s are a burst of the same moment: the best of them gets the highest score, '
+                        'the others a little lower when they are only a little worse.\n'
                         % ', '.join(map(str, g)) for g in groups.values() if len(g) > 1)
         prompt = RATE_PROMPT.format(
             sheet=name, n=len(chunk), bursts=btext, language=language,
@@ -736,23 +749,37 @@ def cmd_rate(req):
 
 # ---------------------------------------------------------------------------
 # Best Take: the best face of everyone across a burst
+#
+# A face is pasted only from a photo where that head is where it is in the base
+# photo, the same size, turned the same way: the head of a person who moved
+# pasted onto the base made a double image (the hair twice, a neighbour's head
+# in the patch). The choice among those faces is the AI's when one is
+# connected (eyes open, looking at the camera, the expression), else the
+# measures here. The patch is the inner face, aligned on its landmarks, and
+# it is left out when its edge does not match the base.
 
-def _match_faces(base_faces, faces, shift):
-    """index of the face matching each base face, by position (after the
-    global shift between the frames), or -1"""
-    out = []
-    for bf in base_faces:
-        bx = bf['box'][0] + bf['box'][2] / 2.0
-        by = bf['box'][1] + bf['box'][3] / 2.0
-        best, bd = -1, 1e9
-        for k, f in enumerate(faces):
-            fx = f['box'][0] + f['box'][2] / 2.0 - shift[0]
-            fy = f['box'][1] + f['box'][3] / 2.0 - shift[1]
-            d = math.hypot(fx - bx, fy - by)
-            if d < bd:
-                best, bd = k, d
-        out.append(best if bd < 0.6 * bf['box'][2] else -1)
-    return out
+BESTTAKE_PROMPT = """The image {sheet} shows the faces of the people of a group photo taken several times in a burst: a row per person (the letter on the left), a column per photo (the number on top). An empty cell: that face cannot be used from that photo. The column framed in green is the photo the others are pasted into.
+For every person choose the photo where the face is the best for the group photo: eyes open, looking at the camera, a natural smile or a good expression, sharp, not covered by hair, a hand or another person. Keep the face of the green photo when no other face is clearly better.
+Answer with JSON only, no other text:
+{{"faces":{{"A":1,"B":3}}}}"""
+
+
+BT_EDGE = 0.34       # the most the edge of a pasted face may differ from the base
+
+
+def _geometry(f):
+    """yaw (nose off the middle of the eyes, in eye distances), roll (degrees)
+    and the eye distance of a face"""
+    lm = f['lm']
+    iod = float(np.linalg.norm(lm[1] - lm[0])) or 1.0
+    mid = (lm[0] + lm[1]) / 2.0
+    yaw = float(lm[2][0] - mid[0]) / iod
+    roll = math.degrees(math.atan2(float(lm[1][1] - lm[0][1]), float(lm[1][0] - lm[0][0])))
+    return yaw, roll, iod
+
+
+def _centre(f):
+    return f['box'][0] + f['box'][2] / 2.0, f['box'][1] + f['box'][3] / 2.0
 
 
 def _shift(a8, b8):
@@ -763,56 +790,149 @@ def _shift(a8, b8):
     return dx, dy
 
 
-def _transplant(base, donor, box, shift):
-    """blend the face at box (base coordinates, full size) from donor into base"""
+def _same_person(bf, faces, shift):
+    """index of the face of the same person as the base face bf (the closest
+    one, after the global shift between the frames), or -1"""
+    bx, by = _centre(bf)
+    best, bd = -1, 1e9
+    for k, f in enumerate(faces):
+        fx, fy = _centre(f)
+        d = math.hypot(fx - shift[0] - bx, fy - shift[1] - by)
+        if d < bd:
+            best, bd = k, d
+    return best if bd < 0.8 * bf['box'][2] else -1
+
+
+def _swappable(bf, f, shift):
+    """None when the face f can be pasted over the base face bf, else why not"""
+    bx, by = _centre(bf)
+    fx, fy = _centre(f)
+    # the patch is aligned on the landmarks: a head a little aside is fine,
+    # the check of the edge of the patch says whether the rest matches
+    if math.hypot(fx - shift[0] - bx, fy - shift[1] - by) > 0.6 * bf['box'][2]:
+        return 'moved'
+    ratio = f['box'][2] / max(bf['box'][2], 1.0)
+    if not 0.8 < ratio < 1.25:
+        return 'moved'
+    byaw, broll, _ = _geometry(bf)
+    fyaw, froll, _ = _geometry(f)
+    if abs(byaw - fyaw) > 0.2 or abs(broll - froll) > 10:
+        return 'turned'
+    return None
+
+
+def _local_score(f, top_sharp):
+    yaw, _, _ = _geometry(f)
+    frontal = max(0.0, 1.0 - abs(yaw) * 2.5)
+    sharp = max(0.0, 1.0 + math.log(max(f['sharp'], 1e-6) / max(top_sharp, 1e-6)) / 2.5)
+    return 0.5 * f['eyes'] + 0.3 * frontal + 0.2 * sharp
+
+
+def _face_sheet(rows, small, base, out, cell=220):
+    """rows: per person, per frame the face or None; the base column framed"""
+    n = len(small)
+    head, side = 44, 50
+    sheet = np.full((head + len(rows) * cell, side + n * cell, 3), 24, np.uint8)
+    for c in range(n):
+        x = side + c * cell
+        cv2.putText(sheet, str(c + 1), (x + cell // 2 - 12, 34), cv2.FONT_HERSHEY_DUPLEX, 1.1,
+                    (0, 210, 255), 2, cv2.LINE_AA)
+    for r, row in enumerate(rows):
+        y = head + r * cell
+        cv2.putText(sheet, chr(65 + r), (10, y + cell // 2 + 14), cv2.FONT_HERSHEY_DUPLEX, 1.2,
+                    (0, 210, 255), 2, cv2.LINE_AA)
+        for c, f in enumerate(row):
+            if f is None:
+                continue
+            x0, y0, w, h = f['box']
+            m = 0.35 * max(w, h)
+            H, W = small[c].shape[:2]
+            a, b = int(max(0, x0 - m)), int(max(0, y0 - m))
+            crop = small[c][b:int(min(H, y0 + h + m)), a:int(min(W, x0 + w + m))]
+            if crop.size == 0:
+                continue
+            crop = _even_light(crop)          # the eyes of a dark face seen
+            ch, cw = crop.shape[:2]
+            s = (cell - 12) / float(max(ch, cw))
+            crop = cv2.resize(crop, (max(1, int(cw * s)), max(1, int(ch * s))), interpolation=cv2.INTER_AREA)
+            ch, cw = crop.shape[:2]
+            x = side + c * cell + (cell - cw) // 2
+            yy = y + (cell - ch) // 2
+            sheet[yy:yy + ch, x:x + cw] = crop
+    x = side + base * cell
+    cv2.rectangle(sheet, (x + 2, head + 2), (x + cell - 3, sheet.shape[0] - 3), (60, 200, 60), 4)
+    imwrite(out, sheet, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    return out
+
+
+def _transplant(base, donor, box, blm, dlm):
+    """paste the inner face of donor over the face at box of base (full size
+    coordinates, blm and dlm the landmarks of the face in each): '' when done,
+    else why not"""
     H, W = base.shape[:2]
     x, y, w, h = box
     cx, cy = x + w / 2.0, y + h / 2.0
-    rw, rh = w * 1.9, h * 2.2                         # face, hair and chin
-    x0, y0 = int(max(0, cx - rw / 2)), int(max(0, cy - rh * 0.55))
-    x1, y1 = int(min(W, cx + rw / 2)), int(min(H, cy + rh * 0.45))
+    x0, y0 = int(max(0, cx - 0.85 * w)), int(max(0, cy - 0.9 * h))
+    x1, y1 = int(min(W, cx + 0.85 * w)), int(min(H, cy + 0.9 * h))
     if x1 - x0 < 16 or y1 - y0 < 16:
-        return False
-    # donor region, larger to allow the alignment
-    m = int(max(w, h) * 0.35)
-    dx0, dy0 = int(max(0, x0 + shift[0] - m)), int(max(0, y0 + shift[1] - m))
-    dx1, dy1 = int(min(donor.shape[1], x1 + shift[0] + m)), int(min(donor.shape[0], y1 + shift[1] + m))
-    tgt = base[y0:y1, x0:x1]
-    src = donor[dy0:dy1, dx0:dx1]
-    # affine alignment of the donor patch onto the base patch (ECC, on a small copy)
-    s = min(1.0, 400.0 / max(tgt.shape[:2]))
+        return 'small'
+    M, _ = cv2.estimateAffinePartial2D(dlm.astype(np.float32), blm.astype(np.float32), method=cv2.LMEDS)
+    if M is None:
+        return 'align'
+    M = M.astype(np.float32)
+    M[0, 2] -= x0
+    M[1, 2] -= y0
+    tgt = to_float(base[y0:y1, x0:x1])
+    aligned = cv2.warpAffine(to_float(donor), M, (x1 - x0, y1 - y0), flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_REFLECT)
+    # the landmarks are found on a small copy: refine on the pixels
+    s = min(1.0, 320.0 / max(tgt.shape[:2]))
     tg = cv2.cvtColor(to8(cv2.resize(tgt, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)), cv2.COLOR_BGR2GRAY)
-    sg = cv2.cvtColor(to8(cv2.resize(src, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)), cv2.COLOR_BGR2GRAY)
-    warp = np.array([[1, 0, (dx0 - x0) * s], [0, 1, (dy0 - y0) * s]], dtype=np.float32)
-    warp_inv = cv2.invertAffineTransform(warp)
+    ag = cv2.cvtColor(to8(cv2.resize(aligned, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)), cv2.COLOR_BGR2GRAY)
+    warp = np.eye(2, 3, dtype=np.float32)
     try:
-        _, warp_inv = cv2.findTransformECC(tg.astype(np.float32), sg.astype(np.float32), warp_inv,
-                                           cv2.MOTION_AFFINE,
-                                           (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 80, 1e-5),
-                                           None, 5)
+        _, warp = cv2.findTransformECC(tg.astype(np.float32), ag.astype(np.float32), warp, cv2.MOTION_EUCLIDEAN,
+                                       (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 60, 1e-5), None, 5)
+        if abs(warp[0, 2]) < 0.1 * w * s and abs(warp[1, 2]) < 0.1 * h * s:
+            warp[:, 2] /= s
+            aligned = cv2.warpAffine(aligned, warp, (x1 - x0, y1 - y0),
+                                     flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REFLECT)
     except cv2.error:
-        pass    # keep the translation from the global shift
-    full = warp_inv.copy()
-    full[:, 2] /= s
-    aligned = cv2.warpAffine(to_float(src), full, (x1 - x0, y1 - y0),
-                             flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REFLECT)
-    # soft elliptic mask, color matched on a ring around the face
+        pass
+    # the inner face: brows to chin, cheek to cheek, not the hair
+    pts = blm - np.array([x0, y0], np.float32)
+    ex = (pts[0] + pts[1]) / 2.0
+    mouth = (pts[3] + pts[4]) / 2.0
+    iod = float(np.linalg.norm(pts[1] - pts[0])) or 1.0
+    centre = (ex + mouth) / 2.0
+    angle = math.degrees(math.atan2(float(pts[1][1] - pts[0][1]), float(pts[1][0] - pts[0][0])))
+    axes = (int(iod * 1.05), int(max(float(np.linalg.norm(mouth - ex)), iod * 0.6) * 1.35))
     mask = np.zeros((y1 - y0, x1 - x0), np.float32)
-    cv2.ellipse(mask, (int(cx - x0), int(cy - y0 - h * 0.08)), (int(w * 0.72), int(h * 0.9)),
-                0, 0, 360, 1.0, -1)
-    k = int(max(w, h) * 0.18) | 1
+    cv2.ellipse(mask, (int(centre[0]), int(centre[1])), axes, angle, 0, 360, 1.0, -1)
+    k = int(iod * 0.35) | 1
     mask = cv2.GaussianBlur(mask, (k, k), 0)
-    tf = to_float(tgt)
-    ring = (mask > 0.05) & (mask < 0.6)
-    if ring.sum() > 50:
-        for c in range(3):
-            a = aligned[:, :, c][ring].mean()
-            b = tf[:, :, c][ring].mean()
-            if a > 1e-4:
-                aligned[:, :, c] *= b / a
-    out = tf * (1 - mask[..., None]) + aligned * mask[..., None]
+    # the colors of the base on a ring around the face, and the ring must match
+    ring = (mask > 0.03) & (mask < 0.5)
+    if ring.sum() < 50:
+        return 'small'
+    for c in range(3):
+        a = aligned[:, :, c][ring].mean()
+        b = tgt[:, :, c][ring].mean()
+        if a > 1e-4:
+            aligned[:, :, c] *= b / a
+    # on a small copy: the noise of a full size photo does not count
+    s2 = min(1.0, 200.0 / max(tgt.shape[:2]))
+    small = lambda im: cv2.resize(im, None, fx=s2, fy=s2, interpolation=cv2.INTER_AREA)  # noqa: E731
+    lum = lambda im: im[:, :, 0] * 0.114 + im[:, :, 1] * 0.587 + im[:, :, 2] * 0.299  # noqa: E731
+    lt, la, ms = lum(small(tgt)), lum(small(aligned)), small(mask)
+    ring_s = (ms > 0.03) & (ms < 0.5)
+    diff = float(np.abs(lt - la)[ring_s].mean() / max(float(lt[ring_s].mean()), 0.02)) if ring_s.any() else 1.0
+    log('best take: edge difference %.3f' % diff)
+    if diff > BT_EDGE:
+        return 'edge'
+    out = tgt * (1 - mask[..., None]) + aligned * mask[..., None]
     base[y0:y1, x0:x1] = from_float(out, base.dtype)
-    return True
+    return ''
 
 
 def cmd_besttake(req):
@@ -831,49 +951,82 @@ def cmd_besttake(req):
             f.update(FACES.analyse(s8, f))
             fl.append(f)
         faces.append(fl)
-        progress(0.1 + 0.4 * (k + 1) / len(full), 'finding the faces %d/%d' % (k + 1, len(full)))
+        progress(0.05 + 0.35 * (k + 1) / len(full), 'finding the faces %d/%d' % (k + 1, len(full)))
     if not any(faces):
         raise RuntimeError('no face found in these photos')
 
     shifts = [_shift(small[0], s) for s in small]           # relative to frame 0
-    n_faces = [len(f) for f in faces]
+    top = max((f['sharp'] for fl in faces for f in fl), default=1.0)
+    # the base: the most faces, then the best ones
+    base = max(range(len(full)), key=lambda k: (len(faces[k]), sum(_local_score(f, top) for f in faces[k])))
+    bshift = shifts[base]
 
-    def frame_score(k):
-        return sum(0.5 * f['eyes'] + 0.2 * f['happy'] for f in faces[k]) + 0.001 * n_faces[k]
-    base = max(range(len(full)), key=lambda k: (n_faces[k], frame_score(k)))
+    # every face of the base, and its faces in the other photos that can be
+    # pasted; a better face that cannot is said in the report
+    rows, lost = [], []
+    for bf in faces[base]:
+        row, better = [], ''
+        for k in range(len(full)):
+            if k == base:
+                row.append(bf)
+                continue
+            rel = (shifts[k][0] - bshift[0], shifts[k][1] - bshift[1])
+            idx = _same_person(bf, faces[k], rel)
+            no = _swappable(bf, faces[k][idx], rel) if idx >= 0 else 'missing'
+            row.append(faces[k][idx] if not no else None)
+            if no and no != 'missing' and _local_score(faces[k][idx], top) > _local_score(bf, top) + 0.05:
+                better = no
+        rows.append(row)
+        lost.append(better)
+
+    # the choice: the AI, else the measures
+    choice, chooser = {}, 'local'
+    provider = req.get('provider') or ''
+    if provider and any(sum(f is not None for f in row) > 1 for row in rows):
+        work = tempfile.mkdtemp(prefix='lsai_besttake_')
+        try:
+            progress(0.45, 'asking %s for the best faces' % provider)
+            sheet = _face_sheet(rows, small, base, os.path.join(work, 'faces.jpg'))
+            answer = ask_model(provider, BESTTAKE_PROMPT.format(sheet='faces.jpg'), [sheet], work,
+                               req.get('model', ''), int(req.get('timeout', 300)))
+            for key, v in (extract_json(answer).get('faces') or {}).items():
+                r, c = ord(str(key)[:1].upper()) - 65, int(v) - 1
+                if 0 <= r < len(rows) and 0 <= c < len(full) and rows[r][c] is not None:
+                    choice[r] = c
+            chooser = provider
+        except Exception as e:     # noqa: BLE001
+            log('best take: the AI did not choose (%s), the measures do' % e)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+    for r, row in enumerate(rows):
+        if r in choice:
+            continue
+        cands = [c for c, f in enumerate(row) if f is not None]
+        c = max(cands, key=lambda c: _local_score(row[c], top))
+        choice[r] = c if _local_score(row[c], top) > _local_score(row[base], top) + 0.05 else base
 
     result = full[base].copy()
     report = []
-    base_shift = shifts[base]
-    for fi, bf in enumerate(faces[base]):
-        cands = [(base, bf)]
-        for k in range(len(full)):
-            if k == base:
-                continue
-            rel = (shifts[k][0] - base_shift[0], shifts[k][1] - base_shift[1])
-            idx = _match_faces([bf], faces[k], rel)[0]
-            if idx >= 0:
-                cands.append((k, faces[k][idx]))
-        top = max(f['sharp'] for _, f in cands) or 1.0
-
-        def score(f):
-            s = max(0.0, 1.0 + math.log(max(f['sharp'], 1e-6) / top) / 2.5)
-            return 0.55 * f['eyes'] + 0.2 * f['happy'] + 0.25 * s
-        k_best, f_best = max(cands, key=lambda c: score(c[1]))
-        entry = dict(face=fi, frame=frames[k_best]['id'], score=round(score(f_best), 3),
-                     base_score=round(score(bf), 3), replaced=False)
-        if k_best != base and score(f_best) > score(bf) + 0.05:
-            sc = scales[base]
-            box = [v / sc for v in bf['box']]
-            rel = ((shifts[k_best][0] - base_shift[0]) / sc, (shifts[k_best][1] - base_shift[1]) / sc)
-            entry['replaced'] = _transplant(result, full[k_best], box, rel)
+    sc = scales[base]
+    for r, row in enumerate(rows):
+        c = choice[r]
+        entry = dict(face=r, frame=frames[c]['id'], replaced=False, kept='')
+        if c != base:
+            box = [v / sc for v in row[base]['box']]
+            blm = row[base]['lm'] / sc
+            dlm = row[c]['lm'] / scales[c]
+            no = _transplant(result, full[c], box, blm, dlm)
+            entry['replaced'] = not no
+            entry['kept'] = no
+        elif lost[r]:
+            entry['kept'] = lost[r]
         report.append(entry)
-        progress(0.55 + 0.4 * (fi + 1) / len(faces[base]), 'face %d/%d' % (fi + 1, len(faces[base])))
+        progress(0.6 + 0.35 * (r + 1) / len(rows), 'face %d/%d' % (r + 1, len(rows)))
     out = req['output']
     imwrite(out, result)
     progress(1.0, 'done')
-    return dict(output=out, base=frames[base]['id'], faces=report,
-                replaced=sum(1 for r in report if r['replaced']))
+    return dict(output=out, base=frames[base]['id'], faces=report, chooser=chooser,
+                replaced=sum(1 for e in report if e['replaced']))
 
 
 # ---------------------------------------------------------------------------

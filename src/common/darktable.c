@@ -1711,6 +1711,19 @@ int dt_init(int argc,
 
   g_slist_free_full(config_override, g_free);
 
+  // Tonelark: the tooltip of a thumbnail shows its notes (the reason of an AI
+  // score); a config of an older version keeps the pattern without them
+  {
+    const char *key = "plugins/lighttable/thumbnail_tooltip_pattern";
+    const char *tip = dt_conf_get_string_const(key);
+    if(tip && *tip && !strstr(tip, "notes") && g_str_has_prefix(tip, "<b>$(FILE_NAME).$(FILE_EXTENSION)</b>"))
+    {
+      gchar *with = g_strconcat(tip, "$(Xmp.acdsee.notes+$(NL)$(NL)$(Xmp.acdsee.notes))", NULL);
+      dt_conf_set_string(key, with);
+      g_free(with);
+    }
+  }
+
   if(has_workspace)
   {
     // restore dbname & label (as set in call dt_workspace_create) to
