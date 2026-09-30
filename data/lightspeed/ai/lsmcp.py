@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import lsedit  # noqa: E402
 
-VERSION = '1.3.4'
+VERSION = '1.3.5'
 PROTOCOL = '2025-06-18'
 
 
