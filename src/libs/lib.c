@@ -65,7 +65,9 @@ gboolean dt_lib_is_visible_in_view(dt_lib_module_t *module,
 
   gboolean ret = module->views(module) & view->view(view);
   gchar *key = _get_lib_view_path(module, view, "_visible");
-  if(key && dt_conf_key_exists(key))
+  // Tonelark: the setting hides a module of the view, it doesn't show one
+  // that is no more in the view (module order)
+  if(ret && key && dt_conf_key_exists(key))
     ret = dt_conf_get_bool(key);
   g_free(key);
 
