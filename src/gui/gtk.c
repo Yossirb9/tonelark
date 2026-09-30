@@ -2809,10 +2809,26 @@ static GtkWidget *_ui_init_panel_container_center(GtkWidget *container,
   return box;
 }
 
+// Tonelark: the cards at the bottom of a panel end where the cards above end,
+// on the inner side of the scroll bar
+static void _panel_bottom_scrollbar_room(GtkWidget *sw, GdkRectangle *a, GtkWidget *bottom)
+{
+  GtkWidget *bar = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(sw));
+  const int room = bar && gtk_widget_get_child_visible(bar) ? gtk_widget_get_allocated_width(bar) : 0;
+  const gboolean right = gtk_scrolled_window_get_placement(GTK_SCROLLED_WINDOW(sw)) == GTK_CORNER_TOP_LEFT;
+  if(right && gtk_widget_get_margin_end(bottom) != room) gtk_widget_set_margin_end(bottom, room);
+  if(!right && gtk_widget_get_margin_start(bottom) != room) gtk_widget_set_margin_start(bottom, room);
+}
+
 static GtkWidget *_ui_init_panel_container_bottom(GtkWidget *container)
 {
   GtkWidget *w = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(container), w, FALSE, FALSE, 0);
+  GList *children = gtk_container_get_children(GTK_CONTAINER(container));
+  for(const GList *c = children; c; c = g_list_next(c))
+    if(GTK_IS_SCROLLED_WINDOW(c->data))
+      g_signal_connect_after(c->data, "size-allocate", G_CALLBACK(_panel_bottom_scrollbar_room), w);
+  g_list_free(children);
   return w;
 }
 

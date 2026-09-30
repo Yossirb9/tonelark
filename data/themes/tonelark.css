@@ -750,14 +750,11 @@ iconview#import-grid:selected
   border-bottom-color: @ls_accent;
 }
 
-/* the panels of the right (Crop, Basic, Tone Curve...): a card each */
-.dt_lrp_menu
-{
-  margin: 6px 8px 0 8px;
-}
-
+/* the panels of the right (Crop, Basic, Tone Curve...): a card each, the
+   width of the panel. The margin is on the header box: an event box has none */
 .dt_lrp_menu #module-header
 {
+  margin-top: 4px;
   background-color: @ls_panel_alt;
   border: 1px solid @ls_line;
   border-radius: 10px;
@@ -792,7 +789,7 @@ iconview#import-grid:selected
 /* the controls of an open panel: the body of its card */
 #iop-expander.dt_lrp_flat
 {
-  margin: 0 8px;
+  margin: 0;
   background-color: @ls_panel_alt;
   border-left: 1px solid @ls_line;
   border-right: 1px solid @ls_line;
@@ -812,7 +809,9 @@ iconview#import-grid:selected
   padding-bottom: 0.3em;
 }
 
-/* the modules with a header (All tools), and the utility modules: cards */
+/* the modules with a header (All tools), and the utility modules: cards.
+   The modules of an open group of All tools are inside it, the utility
+   modules (Masking, Basic, Module order...) as wide as the panels */
 #iop-expander:not(.dt_lrp_flat),
 #lib-expander
 {
@@ -822,6 +821,11 @@ iconview#import-grid:selected
   background-color: @ls_panel_alt;
 }
 
+#lib-expander
+{
+  margin: 4px 0 0 0;
+}
+
 #iop-expander:not(.dt_lrp_flat) #module-header,
 #lib-expander #module-header
 {
@@ -829,6 +833,18 @@ iconview#import-grid:selected
   border: none;
   border-radius: 10px;
   padding: 0.5em 0.7em;
+}
+
+#lib-expander #module-header
+{
+  padding: 0.6em 0.8em;
+}
+
+#lib-expander #lib-panel-label
+{
+  color: #e9ecf3;
+  font-family: "Segoe UI Semibold", "Segoe UI", sans-serif;
+  font-size: 1.05em;
 }
 
 #iop-expander:not(.dt_lrp_flat) .dt_plugin_ui,

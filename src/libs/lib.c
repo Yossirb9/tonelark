@@ -1370,7 +1370,11 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
                    GINT_TO_POINTER(DT_ACTION_ELEMENT_PRESETS));
   if(!module->get_params
      && !module->set_preferences)
+  {
+    // Tonelark: no presets, no button (as the headers of the panels)
     gtk_widget_set_sensitive(GTK_WIDGET(module->presets_button), FALSE);
+    gtk_widget_set_no_show_all(module->presets_button, TRUE);
+  }
 
   dt_action_define(&module->actions, NULL, NULL, module->presets_button, NULL);
   gtk_box_pack_end(GTK_BOX(header), module->presets_button, FALSE, FALSE, 0);
