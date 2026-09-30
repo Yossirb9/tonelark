@@ -104,7 +104,7 @@ def main():
 | NumPy | BSD-3-Clause (bundled OpenBLAS: BSD-3-Clause; GCC runtime: GPL-3.0 with GCC Runtime Library Exception) | https://numpy.org |
 | OpenCV (opencv-python-headless) | Apache-2.0 | https://opencv.org |
 | YuNet face detection model | MIT | https://github.com/opencv/opencv_zoo |
-| SFace face recognition model | Apache-2.0 | https://github.com/opencv/opencv_zoo |
+| ArcFace ResNet100 face recognition model | Apache-2.0 | https://github.com/onnx/models |
 | Facial expression recognition model (MobileFaceNet) | Apache-2.0 | https://github.com/opencv/opencv_zoo |
 
 The license texts of the Python packages are in their `*.dist-info` folders, the ones of

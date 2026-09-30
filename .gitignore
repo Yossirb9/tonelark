@@ -29,3 +29,6 @@ cmake-build-debug/
 .idea/
 packaging/windows/lightspeed_openwith.iss
 __pycache__/
+
+# Tonelark: too big for git, fetched by tools/lightspeed/fetch_models.py
+data/lightspeed/ai/models/arcfaceresnet100-8.onnx

@@ -52,6 +52,7 @@ MSYS2 UCRT64 with the dependencies listed in `packaging/windows/README.md`, then
 ```
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=ON -DUSE_AI=ON \
       -DCMAKE_INSTALL_PREFIX=C:/lightspeed/install -S . -B ../build
+python tools/lightspeed/fetch_models.py        # the face recognition model (too big for git)
 cmake --build ../build && cmake --install ../build
 python packaging/windows/bundle_python.py       # Python + OpenCV for the AI helper
 python packaging/windows/make_installer.py      # Inno Setup 6: installer + portable zip

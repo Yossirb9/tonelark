@@ -210,7 +210,9 @@ class Faces:
 
 FACES = Faces()
 
-SFACE = os.path.join(MODELS, 'face_recognition_sface_2021dec.onnx')
+# ArcFace ResNet100 (ONNX Model Zoo, Apache 2.0): SFace put children who look
+# alike, of one age and origin, together; ArcFace keeps them apart
+ARCFACE = os.path.join(MODELS, 'arcfaceresnet100-8.onnx')
 
 
 FACE_SIDE = 2400         # the faces are looked for in the photo at this size
@@ -263,11 +265,13 @@ def _even_light(img8):
 
 def cmd_faces(req):
     """the people of the photos: every face big enough to be recognised, with
-    its box (0..1 of the photo), an embedding of 128 numbers (SFace, the same
+    its box (0..1 of the photo), an embedding of 512 numbers (ArcFace, the same
     person gives close embeddings: cosine similarity) and a small square
     thumbnail for the People panel. On this computer, nothing is sent."""
     import base64
-    rec = cv2.FaceRecognizerSF.create(SFACE, '')
+    if not os.path.exists(ARCFACE):
+        raise RuntimeError('the face recognition model is missing: ' + ARCFACE)
+    net = cv2.dnn.readNet(ARCFACE)
     images = req['images']
     out, errors = [], []
     for k, im in enumerate(images):
@@ -285,10 +289,14 @@ def cmd_faces(req):
             # tiny or unsure faces give embeddings that mix people up
             if fw < 28 or fh < 28 or score < 0.7:
                 continue
-            aligned = rec.alignCrop(img8, row)
+            # the face turned upright on its eyes, nose and mouth, 112 x 112
+            aligned = FACES._aligned(img8, np.array(row[4:14], dtype=np.float32).reshape(5, 2))
+            if aligned is None:
+                continue
             light = float(cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY).mean()) / 255.0
-            aligned = _even_light(aligned)
-            emb = rec.feature(aligned).reshape(-1).astype(np.float32)
+            # the network takes RGB 0..255 (its normalisation is inside)
+            net.setInput(cv2.dnn.blobFromImage(aligned, 1.0, (112, 112), (0, 0, 0), swapRB=True))
+            emb = net.forward().reshape(-1).astype(np.float32)
             n = float(np.linalg.norm(emb))
             if n <= 0:
                 continue

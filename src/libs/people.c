@@ -21,7 +21,7 @@
   Lightroom. All of it on this computer.
 
   Find People looks for the faces of the photos of the collection (the AI
-  helper: YuNet finds the faces, SFace gives each an embedding of 128 numbers;
+  helper: YuNet finds the faces, ArcFace gives each an embedding of 512 numbers;
   the faces of one person have close embeddings). A face joins the person it
   is closest to, and the faces of no one are grouped into new people; two
   unnamed people too close to be two are merged.
@@ -176,6 +176,7 @@ static gboolean _scan_done(gpointer data)
   d->busy = FALSE;
   gtk_widget_set_sensitive(d->find, TRUE);
   if(s->changed) dt_people_sync(s->changed);
+  if(!s->error) dt_conf_set_bool(CONF "improved", FALSE);
   gchar *msg = s->error ? g_strdup(s->error)
              : g_strdup_printf(ngettext("%d photo searched, %d face found", "%d photos searched, %d faces found",
                                         s->searched), s->searched, s->faces);
@@ -617,12 +618,15 @@ static void _refresh(dt_lib_module_t *self)
   gchar *head = d->shown > 0 ? g_strdup_printf(_("the photos of %s"), name ? name : _("this person"))
               : rows->len ? g_strdup_printf(ngettext("%d person in this collection", "%d people in this collection",
                                                      rows->len), rows->len)
+              : dt_conf_get_bool(CONF "improved")
+              ? g_strdup(_("the face recognition is new and more accurate: Find People to find the people again"))
               : g_strdup(_("no people found in this collection yet: Find People"));
   gtk_label_set_text(GTK_LABEL(d->head), head);
   g_free(head);
   g_free(name);
+  const guint shown_rows = rows->len;
   g_ptr_array_free(rows, TRUE);
-  gtk_widget_set_visible(d->grid_wrap, rows->len > 0);
+  gtk_widget_set_visible(d->grid_wrap, shown_rows > 0);
   gtk_widget_set_visible(d->all, d->shown > 0);
   gtk_widget_set_visible(d->actions, d->shown > 0);
 }

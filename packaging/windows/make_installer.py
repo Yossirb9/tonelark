@@ -69,6 +69,11 @@ def main():
     if not os.path.exists(os.path.join(install, 'bin', 'Tonelark.exe')):
         sys.exit('%s has no bin\\Tonelark.exe, run cmake --install first' % install)
 
+    # the models too big for git: installed only if fetched before the build
+    model = os.path.join(install, 'share', 'darktable', 'lightspeed', 'ai', 'models', 'arcfaceresnet100-8.onnx')
+    if not os.path.exists(model):
+        sys.exit('%s is missing: run tools/lightspeed/fetch_models.py, then cmake --install' % model)
+
     # the Python runtime of the AI helper
     if not os.path.exists(os.path.join(install, 'share', 'darktable', 'lightspeed', 'ai', 'python', 'python.exe')):
         subprocess.check_call([sys.executable, os.path.join(HERE, 'bundle_python.py'), '--install', install])
