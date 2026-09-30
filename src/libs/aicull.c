@@ -552,12 +552,44 @@ static void _results_free(_result_t *res, const int n)
 
 static void _ratings_queue(dt_lib_module_t *self);
 
+// a photo of a burst, with the other files of its shot (RAW+JPEG), in the
+// group of the best photo of the burst (a stack, Lightroom's name)
+static void _to_group(const dt_imgid_t group, const dt_imgid_t id)
+{
+  // not again in its own group: taking out a leader regroups the others
+  const dt_image_t *img = dt_image_cache_get(id, 'r');
+  if(!img) return;
+  const gboolean in = img->group_id == group;
+  dt_image_cache_read_release(img);
+  if(!in) dt_grouping_add_to_group(group, id);
+}
+
+static void _stack(const dt_imgid_t best, const dt_imgid_t id, GHashTable *twins)
+{
+  const dt_image_t *img = dt_image_cache_get(best, 'r');
+  if(!img) return;
+  const dt_imgid_t group = img->group_id;
+  dt_image_cache_read_release(img);
+  _to_group(group, id);
+  for(GList *l = twins ? g_hash_table_lookup(twins, GINT_TO_POINTER(id)) : NULL; l; l = g_list_next(l))
+    _to_group(group, GPOINTER_TO_INT(l->data));
+}
+
 static void _apply_cull(_job_t *j)
 {
   JsonArray *arr = json_object_get_array_member(j->result, "images");
   const int n = arr ? json_array_get_length(arr) : 0;
-  _result_t *res = g_new0(_result_t, MAX(1, n));
+  // with the other files of each shot (RAW+JPEG), which get its result
+  int total = n;
+  for(int k = 0; k < n; k++)
+  {
+    const dt_imgid_t id = json_object_get_int_member(json_array_get_object_element(arr, k), "id");
+    total += j->twins ? g_list_length(g_hash_table_lookup(j->twins, GINT_TO_POINTER(id))) : 0;
+  }
+  _result_t *res = g_new0(_result_t, MAX(1, total));
+  int t = n;
   GHashTable *best_of = g_hash_table_new(g_direct_hash, g_direct_equal);
+  GList *stacks = NULL;
   int bursts = 0, rejects = 0;
 
   // the best of each burst first
@@ -586,10 +618,12 @@ static void _apply_cull(_job_t *j)
       const dt_imgid_t best = GPOINTER_TO_INT(g_hash_table_lookup(best_of, GINT_TO_POINTER(burst + 1)));
       if(r->id == best)
         r->picked = TRUE;
-      else
+      else if(j->reject)
+        r->stars = DT_VIEW_REJECT;
+      if(j->stack && dt_is_valid_imgid(best))
       {
-        if(j->reject) r->stars = DT_VIEW_REJECT;
-        if(j->stack && dt_is_valid_imgid(best)) dt_grouping_add_to_group(best, r->id);
+        _stack(best, r->id, j->twins);
+        if(r->id == best) stacks = g_list_prepend(stacks, GINT_TO_POINTER(best));
       }
     }
     rejects += r->stars == DT_VIEW_REJECT;
@@ -597,13 +631,33 @@ static void _apply_cull(_job_t *j)
     r->reason = g_strdup(what);
     r->note = g_strdup_printf(_("Tonelark quality %d%%%s%s"), (int)(r->score * 10.0 + 0.5), *what ? ": " : "",
                               what);
+    for(GList *l = j->twins ? g_hash_table_lookup(j->twins, GINT_TO_POINTER(r->id)) : NULL; l; l = g_list_next(l))
+    {
+      _result_t *c = &res[t++];
+      *c = *r;
+      c->id = GPOINTER_TO_INT(l->data);
+      if(!j->stars) c->stars = dt_ratings_get(c->id);
+      if(!c->picked && r->stars == DT_VIEW_REJECT) c->stars = DT_VIEW_REJECT;
+      c->reason = g_strdup(r->reason);
+      c->note = g_strdup(r->note);
+      rejects += c->stars == DT_VIEW_REJECT;
+    }
   }
-  _store(KIND_CULL, "", res, n);
-  _results_free(res, n);
+  // the best photo on top of each stack
+  for(GList *l = stacks; l; l = g_list_next(l)) dt_grouping_change_representative(GPOINTER_TO_INT(l->data));
+  _store(KIND_CULL, "", res, t);
+  _results_free(res, t);
   g_hash_table_destroy(best_of);
 
-  gchar *msg = g_strdup_printf(_("%d photos, %d bursts: the best of each is picked%s"), n, bursts,
-                               rejects ? _(", the others rejected") : "");
+  // the stacks closed, to see only the best of each burst
+  if(stacks && !darktable.gui->grouping)
+    dt_action_process("global/grouping", 0, NULL, "on", 1.0f);
+  const gboolean stacked = stacks != NULL;
+  g_list_free(stacks);
+
+  gchar *msg = g_strdup_printf(_("%d photos, %d bursts: the best of each is picked%s%s"), n, bursts,
+                               rejects ? _(", the others rejected") : "",
+                               stacked ? _(", each burst in a stack (the number on a photo opens it)") : "");
   _set_status(j->self, msg);
   dt_control_log("%s", msg);
   g_free(msg);
@@ -1219,8 +1273,9 @@ static int32_t _run_job(dt_job_t *job)
   else
   {
     GList *all = j->imgs;
-    if(j->task == TASK_RATE)
+    if(j->task == TASK_RATE || j->task == TASK_CULL)
     {
+      // one photo for each shot: RAW+JPEG made a "burst" of two in the cull
       j->twins = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _twins_free);
       j->imgs = _one_per_shot(all, j->twins);
     }
@@ -1370,8 +1425,15 @@ void gui_init(dt_lib_module_t *self)
                                              " not keep"), "plugins/lighttable/aicull/reject", FALSE);
   d->stars = _check(_("set stars"), _("rate the photos from the quality (1 to 5 stars)"),
                     "plugins/lighttable/aicull/stars", TRUE);
-  d->stack = _check(_("stack bursts"), _("group each burst with its best photo on top"),
-                    "plugins/lighttable/aicull/stack", FALSE);
+  // stacks on by default, once for a config that had them off
+  if(!dt_conf_key_exists("lightspeed/stack_bursts"))
+  {
+    dt_conf_set_bool("plugins/lighttable/aicull/stack", TRUE);
+    dt_conf_set_bool("lightspeed/stack_bursts", TRUE);
+  }
+  d->stack = _check(_("stack bursts"), _("each burst in a stack, its best photo on top: the number on the photo"
+                                         " opens and closes the stack"),
+                    "plugins/lighttable/aicull/stack", TRUE);
 
   d->provider = dt_lsai_provider_ui_new("plugins/lighttable/aicull/provider", "claude", FALSE);
   d->criteria = gtk_entry_new();

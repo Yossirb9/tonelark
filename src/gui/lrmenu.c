@@ -108,6 +108,12 @@ static const _item_t _photo[] = {
   { N_("Rotate Right"), _ACTION, "lib/image/rotate selected images 90 degrees CW", NULL, NULL, 0, 0, TRUE },
   { N_("Create Virtual Copy"), _ACTION, "lib/image/duplicate", NULL, NULL, GDK_KEY_apostrophe, CTRL, TRUE },
   { N_("Remove from Library..."), _ACTION, "lib/image/remove", NULL, NULL, 0, 0, TRUE },
+  SEP,
+  // stacks: the groups of darktable (a burst, a RAW+JPEG shot)
+  { N_("Group into Stack"), _ACTION, "lib/image/group", NULL, NULL, GDK_KEY_g, CTRL, TRUE },
+  { N_("Unstack"), _ACTION, "lib/image/ungroup", NULL, NULL, GDK_KEY_g, CTRL | SHIFT, TRUE },
+  { N_("Collapse All Stacks"), _ACTION, "global/grouping", NULL, "on", 0, 0, FALSE },
+  { N_("Expand All Stacks"), _ACTION, "global/grouping", NULL, "off", 0, 0, FALSE },
   { NULL, -1 } };
 
 static const _item_t _view[] = {

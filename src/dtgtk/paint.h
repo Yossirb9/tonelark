@@ -24,6 +24,8 @@
 G_BEGIN_DECLS
 
 #define CPF_USER_DATA 0x1000
+// Tonelark: the number of photos of a stack, in the flags of its icon
+#define CPF_GROUP_COUNT_SHIFT 16
 
 typedef enum dtgtk_cairo_paint_flags_t
 {

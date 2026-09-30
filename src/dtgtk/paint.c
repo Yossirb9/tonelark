@@ -2188,6 +2188,35 @@ void dtgtk_cairo_paint_grouping(cairo_t *cr, const gint x, const gint y, const g
 {
   PREAMBLE(1, 1, 0, 0)
 
+  // Tonelark: a stack shows its number of photos on a card, as Lightroom,
+  // with a sheet behind it
+  const int count = (flags >> CPF_GROUP_COUNT_SHIFT) & 0xffff;
+  if(count > 1)
+  {
+    cairo_move_to(cr, 0.16, 0.08);
+    cairo_line_to(cr, 0.98, 0.08);
+    cairo_line_to(cr, 0.98, 0.80);
+    cairo_stroke(cr);
+    cairo_rectangle(cr, 0.02, 0.22, 0.82, 0.76);
+    if(flags & CPF_ACTIVE)
+      cairo_fill(cr);
+    else
+      cairo_stroke(cr);
+
+    char txt[8];
+    snprintf(txt, sizeof(txt), "%d", count);
+    cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, count > 99 ? 0.40 : count > 9 ? 0.52 : 0.66);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, txt, &te);
+    // dark on the filled card of the photo on top
+    if(flags & CPF_ACTIVE) cairo_set_source_rgb(cr, 0.07, 0.08, 0.10);
+    cairo_move_to(cr, 0.43 - te.width / 2.0 - te.x_bearing, 0.60 - te.height / 2.0 - te.y_bearing);
+    cairo_show_text(cr, txt);
+    FINISH
+    return;
+  }
+
   cairo_move_to(cr, 0.30, 0.15);
   cairo_line_to(cr, 0.95, 0.15);
   cairo_line_to(cr, 0.95, 0.65);

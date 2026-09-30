@@ -92,6 +92,7 @@ typedef struct
   gboolean has_audio;
   gboolean has_tags;
   gboolean is_grouped;
+  int group_count;        // Tonelark: the photos of its group (stack)
   gboolean is_bw;
   gboolean is_bw_flow;
   gboolean is_hdr;

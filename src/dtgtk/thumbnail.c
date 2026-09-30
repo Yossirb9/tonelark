@@ -160,16 +160,15 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
 
   // the group leader
   if(thumb->imgid == thumb->groupid)
-    tt = g_strdup_printf("\n\u2022 <b>%s (%s)</b>", _("current"), _("leader"));
+    tt = g_strdup_printf("\n\u2022 <b>%s (%s)</b>", _("current"), _("on top"));
   else
   {
     const dt_image_t *img = dt_image_cache_get(thumb->groupid, 'r');
     if(img)
     {
       tt = g_strdup_printf
-        ("%s\n\u2022 <b>%s (%s)</b>",
-         _("\nclick here to set this image as group leader\n"),
-         img->filename, _("leader"));
+        ("\n\u2022 <b>%s (%s)</b>",
+         img->filename, _("on top"));
       dt_image_cache_read_release(img);
     }
   }
@@ -205,7 +204,8 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
   sqlite3_finalize(stmt);
 
   // and the number of grouped images
-  gchar *ttf = g_strdup_printf("%d %s\n%s", nb, _("grouped images"), tt);
+  gchar *ttf = g_strdup_printf("%d %s\n%s\n%s", nb, _("photos in this stack"),
+                               _("click: open or close the stack\nalt+click: this photo on top"), tt);
   g_free(tt);
 
   // let's apply the tooltip
@@ -311,8 +311,10 @@ static void _image_get_infos(dt_thumbnail_t *thumb)
                             1, thumb->imgid);
   DT_DEBUG_SQLITE3_BIND_INT(darktable.view_manager->statements.get_grouped,
                             2, thumb->imgid);
-  thumb->is_grouped =
-    (sqlite3_step(darktable.view_manager->statements.get_grouped) == SQLITE_ROW);
+  int others = 0;
+  while(sqlite3_step(darktable.view_manager->statements.get_grouped) == SQLITE_ROW) others++;
+  thumb->is_grouped = others > 0;
+  thumb->group_count = others + 1;
 
   // grouping tooltip
   _image_update_group_tooltip(thumb);
@@ -977,6 +979,17 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
               (thumb->rating > i && thumb->rating < DT_VIEW_REJECT));
 
   _set_flag(thumb->w_group, GTK_STATE_FLAG_ACTIVE, (thumb->imgid == thumb->groupid));
+  // Tonelark: the number of photos of the stack on its icon
+  {
+    GtkDarktableThumbnailBtn *gb = DTGTK_THUMBNAIL_BTN(thumb->w_group);
+    const gint flags = (gb->icon_flags & ((1 << CPF_GROUP_COUNT_SHIFT) - 1))
+                       | (CLAMP(thumb->group_count, 0, 0xffff) << CPF_GROUP_COUNT_SHIFT);
+    if(flags != gb->icon_flags)
+    {
+      gb->icon_flags = flags;
+      gtk_widget_queue_draw(thumb->w_group);
+    }
+  }
 
   _set_flag(thumb->w_main, GTK_STATE_FLAG_SELECTED, thumb->selected);
 
@@ -1120,18 +1133,19 @@ static gboolean _event_grouping_release(GtkWidget *widget,
       sqlite3_step(stmt);
       sqlite3_finalize(stmt);
     }
-    else if(!darktable.gui->grouping
-            || thumb->groupid == darktable.gui->expanded_group_id)
-      // the group is already expanded, so ...
+    // Tonelark: a click opens or closes the stack, as in Lightroom (from any
+    // of its photos); alt+click puts the photo on top of it
+    else if(dt_modifier_is(event->state, GDK_MOD1_MASK))
+      darktable.gui->expanded_group_id = dt_grouping_change_representative(thumb->imgid);
+    else if(!darktable.gui->grouping)
     {
-      if(thumb->imgid == darktable.gui->expanded_group_id
-         && darktable.gui->grouping)
-        // ... collapse it
-        darktable.gui->expanded_group_id = NO_IMGID;
-      else // ... make the image the new representative of the group
-        darktable.gui->expanded_group_id = dt_grouping_change_representative(thumb->imgid);
+      // all the stacks are open: they close
+      dt_action_process("global/grouping", 0, NULL, "on", 1.0f);
+      return FALSE;
     }
-    else // expand the group
+    else if(thumb->groupid == darktable.gui->expanded_group_id)
+      darktable.gui->expanded_group_id = NO_IMGID;
+    else
       darktable.gui->expanded_group_id = thumb->groupid;
     dt_collection_update_query(darktable.collection,
                                DT_COLLECTION_CHANGE_RELOAD,
