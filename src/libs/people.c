@@ -835,10 +835,28 @@ static void _pick_up_shown(dt_lib_module_t *self)
       *last = '\0';
       const char *rest = strchr(buf, ':');
       d->saved = g_strdup_printf("%d:%s", rules - 1, rest ? rest + 1 : "");
-      dt_collection_serialize(buf, sizeof(buf), FALSE);
-      d->ours = g_strdup(buf);
-      d->shown = person;
-      _exec("DELETE FROM memory.ls_people_base");
+      // a person that is no more (a new face model, merged): its photos
+      // would be none, the collection before it is shown
+      sqlite3_stmt *stmt;
+      DT_DEBUG_SQLITE3_PREPARE_V2(_db(), "SELECT 1 FROM main.ls_people WHERE id = ?1", -1, &stmt, NULL);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, person);
+      const gboolean exists = sqlite3_step(stmt) == SQLITE_ROW;
+      sqlite3_finalize(stmt);
+      if(!exists)
+      {
+        d->setting = TRUE;
+        dt_collection_deserialize(d->saved, FALSE);
+        d->setting = FALSE;
+        g_free(d->saved);
+        d->saved = NULL;
+      }
+      else
+      {
+        dt_collection_serialize(buf, sizeof(buf), FALSE);
+        d->ours = g_strdup(buf);
+        d->shown = person;
+        _exec("DELETE FROM memory.ls_people_base");
+      }
     }
   }
   g_free(rule);
